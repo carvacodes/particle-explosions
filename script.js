@@ -24,7 +24,7 @@ let newBlast = 0;             // the timer that will allow new particle bursts t
 let reflectThreshold = 300;   // the threshold for when reflections will appear on the ground
 let drawStrokes = true;       // user toggleable variable for whether to draw particles with rectangles at the particle's position or draw strokes between the particle's last x/y and current x/y positions
 let persistCanvas = false;    // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
-let showFloor = true;         // user toggleable variable that shows or hides the reflective floor pattern (a fixed position div)
+let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor pattern (a fixed position div)
 let particles = [];           // holds the particle objects and is iterated through on every frame
 
 /////////////////////
@@ -39,7 +39,7 @@ document.addEventListener('click',function(e){
 
 // get the relevant button objects
 let drawStrokesButton = document.getElementById('drawStrokesButton');
-let showFloorButton = document.getElementById('showFloorButton');
+let enableFloorButton = document.getElementById('enableFloorButton');
 let persistCanvasButton = document.getElementById('persistCanvasButton');
 let floor = document.getElementsByClassName('floor')[0];
 
@@ -50,11 +50,11 @@ drawStrokesButton.addEventListener('click', (e) => {
   drawStrokesButton.classList.toggle('active');
 })
 
-showFloorButton.addEventListener('click', (e) => {
+enableFloorButton.addEventListener('click', (e) => {
   e.stopImmediatePropagation();
-  showFloor = showFloor ? false : true;
-  showFloorButton.classList.toggle('active');
-  floor.style.display = showFloor ? 'initial' : 'none';
+  enableFloor = enableFloor ? false : true;
+  enableFloorButton.classList.toggle('active');
+  floor.style.display = enableFloor ? 'initial' : 'none';
 })
 
 persistCanvasButton.addEventListener('click', (e) => {
@@ -91,14 +91,19 @@ class Particle {
     this.x += this.xSpeed;
     this.xSpeed *= friction;
     
-    // if the y position has reached the z position, bounce (ySpeed * -0.5)
-    if (this.y + this.ySpeed >= this.z) {
-      this.ySpeed *= -0.5;
-    }
     this.y += this.ySpeed;  // add the ySpeed to the y position
+
+    // the following logic only applies when the floor is enabled
+    if (!enableFloor) { return };
+
     // allow the particle to speed up if its y position hasn't reached its z position; 
     if (this.y < this.z) {
       this.ySpeed = this.ySpeed + (gravity * gravity); 
+    }
+
+    // if the y position has reached the z position, bounce (ySpeed * -0.5)
+    if (this.y + this.ySpeed >= this.z) {
+      this.ySpeed *= -0.5;
     }
 
     // increase the z position by zSpeed on every frame, but decrease zSpeed by the friction coefficient
@@ -125,9 +130,9 @@ class Particle {
       ctx.fillRect(this.x, this.y, this.size, this.size);
     }
 
-    // check height; if within the reflectThreshold, draw reflections
+    // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
     let height = this.z - this.y;
-    if (height <= reflectThreshold) {
+    if (height <= reflectThreshold && enableFloor) {
       let heightFalloff = 1 - (height / (reflectThreshold));  // heightFalloff is a ratio for most of these properties; closer to the ground = more effect
       let glowAlpha = heightFalloff * 0.1;  // set the alpha for the floor reflection glow relative to the heightFalloff
 

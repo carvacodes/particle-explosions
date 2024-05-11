@@ -9,9 +9,9 @@ body {
 .floor {
   z-index: -100;
   width: 100vw;
-  height: 25vh;
+  height: 28vh;
   position: fixed;
-  top: 75vh;
+  top: 72vh;
   left: 0;
   background: linear-gradient(
     to bottom right, 
@@ -36,9 +36,9 @@ body {
   content: ' ';
   z-index: -50;
   width: 100vw;
-  height: 25vh;
+  height: inherit;
   position: fixed;
-  top: 75vh;
+  top: inherit;
   left: 0;
   background: linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.1));
 }
