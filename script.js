@@ -70,14 +70,14 @@ window.addEventListener('load', ()=>{
 
     // this method runs for all of a group's particles when it is still being rendered
     // particles have internal logic in their move() method to handle their own specifics and math
-    stepParticles() {
+    stepParticles(frameDuration) {
       let continueRendering = false;
 
       for (let i = 0; i < this.particles.length; i++) {
         let particle = this.particles[i];
         if (particle.lifetime > 0 ) {
           if (!continueRendering) { continueRendering = true; }
-          particle.move();
+          particle.move(frameDuration);
         }
       }
 
@@ -126,10 +126,14 @@ window.addEventListener('load', ()=>{
       this.prevZ = this.z;
     }
 
-    // move functions for the particle
-    move() {
+    // move functions for the particle. the amount of movement is adjusted by the last requestAnimationFrame call's duration.
+    move(frameDuration) {
+      // target 16.667ms/frame for speeds. this frameSpeedFactor will change how much each speed and position variable changes,
+      // which should help ensure a more consistent experience across devices and browsers
+      let frameSpeedFactor = frameDuration / 16.667;
+
       // lifetime can be handled first, since it will always change
-      this.lifetime--;
+      this.lifetime -= 1 * frameSpeedFactor;
 
       // immediately stop rendering or processing any particles outside the viewport
       if (this.x < 0 || this.x > innerWidth || this.y > innerHeight) {
@@ -140,19 +144,18 @@ window.addEventListener('load', ()=>{
       this.prevX = this.x;
       this.prevY = this.y;
       this.prevZ = this.z;
-      
       // add x speed straight away
-      this.x += this.xSpeed;
-      this.xSpeed *= friction;
+      this.x += this.xSpeed * frameSpeedFactor;
+      this.xSpeed *= enableFloor ? friction : 1;
       
-      this.y += this.ySpeed;  // add the ySpeed to the y position
+      this.y += this.ySpeed * frameSpeedFactor;  // add the ySpeed to the y position
 
       // z-position logic only applies when the floor is enabled; return here if floors aren't enabled
       if (!enableFloor) { return };
 
       // allow the this to speed up if its y position hasn't reached its z position; 
       if (this.y < this.z) {
-        this.ySpeed = this.ySpeed + (gravity * gravity); 
+        this.ySpeed = this.ySpeed + (gravity * gravity * frameSpeedFactor); 
       }
 
       // if the y position has reached the z position, bounce (ySpeed * -0.5)
@@ -162,7 +165,7 @@ window.addEventListener('load', ()=>{
       }
 
       // increase the z position by zSpeed on every frame, but decrease zSpeed by the friction coefficient
-      this.z += this.zSpeed;
+      this.z += this.zSpeed * frameSpeedFactor;
       this.zSpeed *= friction;
     }
   }
@@ -355,18 +358,15 @@ window.addEventListener('load', ()=>{
   /*******************************************************************************/
 
   // currentTime (and the frameTime var within the animate() function) caps the frame rate at 60fps
-  let currentTime = performance.now();
+  let lastFrameStart = document.timeline.currentTime;
   particleGroups.push(new ParticleGroup(innerWidth / 2, innerHeight / 3, rng.value() * 360));
 
-  function animate() {
-    // if fewer than 16 ms have passed, that would be more than 60fps; exit immediately by requesting another animation frame
-    let frameTime = performance.now();
-    if (frameTime - currentTime < 16) {
-      window.requestAnimationFrame(animate);
-      return;
-    }
-    
-    currentTime = frameTime;  // start the frame timer from the new current time
+  function animate(lastCallbackTime) {
+    // prepare the next animation frame
+    window.requestAnimationFrame(animate);
+
+    const frameTime = lastCallbackTime - lastFrameStart;
+    lastFrameStart = lastCallbackTime;
     
     // if the user has autoburst enabled
     if (autoBursts) {
@@ -376,28 +376,27 @@ window.addEventListener('load', ()=>{
       }
       if (newBurstTimer <= 0) {
         autoPopulate();
-        newBurstTimer = 60;
+        newBurstTimer = 60 / (frameTime / 16.667);  // makes sure the timer goes off once per second (after roughly 60 frames)
       }
     }
 
     // clear the canvas if persist stroke is off
     if (!persistStrokes) { renderer.clear(); }
-    
+        
     // loop particleGroups
     for (let i = 0; i < particleGroups.length; i++) {
       let pGroup = particleGroups[i];
       // if a particle group is still rendering (it has at least one particle with a lifetime > 0), update its particles' positions and queue it for rendering
       if (pGroup.rendering) {
-        pGroup.stepParticles();
+        pGroup.stepParticles(frameTime);
         pGroup.queueForRender(renderer);
+        renderFrame = true;
       }
     }
 
-    // let the rendered run
+    // let the renderer run
     renderer.render();
 
-    // get the next animation frame
-    window.requestAnimationFrame(animate);
   }
 
   // at last: init!

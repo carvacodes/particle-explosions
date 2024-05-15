@@ -63,6 +63,7 @@ button {
   border-radius: 4px;
   border: thin solid black;
   margin-top: 4px;
+  user-select: none;
 }
 
 button.active {
