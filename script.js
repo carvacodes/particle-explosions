@@ -260,11 +260,9 @@ window.addEventListener('load', ()=>{
   /*                                  Listeners                                  */
   /*******************************************************************************/
   // on every click, create a particle burst at that position
-  document.addEventListener('click', function(e){
-    e.preventDefault();
-    particleBurst(e.clientX, e.clientY);
-    newBurstTimer = 120;
-  })
+  document.addEventListener('mousedown', createParticleBurst);
+  document.addEventListener('touchstart', createParticleBurst, {passive: false});
+  document.addEventListener('touchmove', (e) => {e.preventDefault()}, {passive: false});
 
   // get the relevant button objects
   let enableReflectionsButton = document.getElementById('enableReflectionsButton');
@@ -342,6 +340,18 @@ window.addEventListener('load', ()=>{
         }
       }
     }
+  }
+
+  // a helper function for creating particle bursts on mousedown or touchstart
+  function createParticleBurst(e) {
+    if (e.changedTouches) {
+      e = e.touches[0];
+    }
+    if (e.target.tagName == 'BUTTON') {
+      return;
+    }
+    particleBurst(e.clientX, e.clientY);
+    newBurstTimer = 120;
   }
 
   // procedurally generate particles if the user isn't interacting
