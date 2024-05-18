@@ -344,12 +344,14 @@ window.addEventListener('load', ()=>{
 
   // a helper function for creating particle bursts on mousedown or touchstart
   function createParticleBurst(e) {
+    let event = e;  // placeholder for event; used for preventDefault later. this allows us to reuse this same handler for mouse and touch events
     if (e.changedTouches) {
-      e = e.touches[0];
+      e = e.changedTouches[0];
     }
     if (e.target.tagName == 'BUTTON') {
       return;
     }
+    if (event.changedTouches) { event.preventDefault(); }   // as promised: preventDefault on touch events
     particleBurst(e.clientX, e.clientY);
     newBurstTimer = 120;
   }
