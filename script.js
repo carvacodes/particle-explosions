@@ -123,8 +123,8 @@ window.addEventListener('load', ()=>{
       this.lightness = Math.round(60 + rng.value() * 40); // added lightness for more variety
       this.size = Math.ceil(rng.value() * 2);                        // controls the stroke or rect size, depending on the particle render type currently chosen
       this.z = Math.max((4 * innerHeight / 5) + Math.round(rng.value() * innerHeight / 12), this.y);  // simulates depth (see move/render methods)
-      this.xSpeed = 8 + (rng.value() * -16);      // speed variables
-      this.ySpeed = 11 + (rng.value() * -22);      // for each axis
+      this.xSpeed = 11 + (rng.value() * -22);      // speed variables
+      this.ySpeed = 16 + (rng.value() * -32);      // for each axis
       this.zSpeed = 0.5 + (rng.value() * -1);      // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
       this.airborne = true;
       this.prevX = this.x;
@@ -160,22 +160,22 @@ window.addEventListener('load', ()=>{
       bouncing -> your next proposed y position is greater than your z position, and your current or proposed y speeds are large.
       free fall -> your next proposed y position is less than your z position
       */
-      let proposedY = this.y + this.ySpeed;
-      let proposedYSpeed = this.ySpeed - (this.ySpeed * airResistance) + gravity;
-      let proposedZ = this.z + this.zSpeed;
-      let proposedZSpeed = this.zSpeed - (this.zSpeed * airResistance);
+      let proposedY = this.y + this.ySpeed * refreshThrottle;
+      let proposedYSpeed = this.ySpeed - (this.ySpeed * airResistance * refreshThrottle) + (gravity * refreshThrottle);
+      let proposedZ = this.z + this.zSpeed * refreshThrottle;
+      let proposedZSpeed = this.zSpeed - (this.zSpeed * airResistance * refreshThrottle);
 
       if (proposedY < proposedZ) {
         // free fall
         // set speeds
-        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance);
+        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
         this.ySpeed = proposedYSpeed;
         this.zSpeed = proposedZSpeed;
         
         // set coords
-        this.x += this.xSpeed;
-        this.y += this.ySpeed + this.zSpeed;
-        this.z += this.zSpeed;
+        this.x += this.xSpeed * refreshThrottle;
+        this.y += (this.ySpeed * refreshThrottle) + (this.zSpeed * refreshThrottle);
+        this.z += this.zSpeed * refreshThrottle;
       } else {
         // bounce
         // since a bounce interrupts what would be a full y axis displacement,
@@ -184,15 +184,15 @@ window.addEventListener('load', ()=>{
         let movementProportion = Math.abs((this.y - this.z) / proposedYSpeed);
         
         // set speeds
-        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance);
-        this.ySpeed = -0.6 * proposedYSpeed;
+        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
+        this.ySpeed = (-0.6) * proposedYSpeed;
         this.zSpeed = proposedZSpeed;
         
         // set coords
         // we also need to snap the particle's y position to its z position and to the proportion-affected x-position
-        this.x += this.xSpeed * movementProportion;
-        this.z += this.zSpeed;
-        this.y = this.z + this.zSpeed;
+        this.x += this.xSpeed * movementProportion * refreshThrottle;
+        this.z += this.zSpeed * refreshThrottle;
+        this.y = this.z + this.zSpeed * refreshThrottle;
       }
     }
   }
@@ -276,8 +276,8 @@ window.addEventListener('load', ()=>{
   /*                                                                             */
   /*******************************************************************************/
   
-  let gravity = 0.6;              // pretty self-explanatory, but this feels like a good value
-  let airResistance = 0.001;        // particles slow down by this factor the longer they are in the air
+  let gravity = 1.7;              // pretty self-explanatory, but this feels like a good value
+  let airResistance = 0.002;        // particles slow down by this factor the longer they are in the air
   let particlesPerBlast = 60;      // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
   let newBurstTimer = 30;         // the timer that will allow new particle bursts to form automatically
   let reflectThreshold = 300;     // the threshold for when reflections will appear on the ground
