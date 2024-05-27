@@ -122,7 +122,7 @@ window.addEventListener('load', ()=>{
       this.prevLifetime = this.lifetime;
       this.lightness = Math.round(60 + rng.value() * 40); // added lightness for more variety
       this.size = Math.ceil(rng.value() * 2);                        // controls the stroke or rect size, depending on the particle render type currently chosen
-      this.z = Math.max((4 * innerHeight / 5) + Math.round(rng.value() * innerHeight / 12), this.y);  // simulates depth (see move/render methods)
+      this.z = Math.max((4 * _h / 5) + Math.round(rng.value() * _h / 12), this.y);  // simulates depth (see move/render methods)
       this.xSpeed = 11 + (rng.value() * -22);      // speed variables
       this.ySpeed = 16 + (rng.value() * -32);      // for each axis
       this.zSpeed = 0.5 + (rng.value() * -1);      // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
@@ -137,7 +137,7 @@ window.addEventListener('load', ()=>{
       this.lifetime -= refreshThrottle;
 
       // no further processing for particles outside the viewport or whose lifetime is 0 or less
-      if (this.x < 0 || this.x > innerWidth || this.y > innerHeight || this.lifetime <= 0) {
+      if (this.x < 0 || this.x > _w || this.y > _h || this.lifetime <= 0) {
         this.lifetime = -1;
         return;
       }
@@ -208,13 +208,13 @@ window.addEventListener('load', ()=>{
       this.renderQueue = [];
       this.clearTimer = 0;
 
-      this.canvas.width = window.innerWidth;
-      this.canvas.height = window.innerHeight;
+      this.canvas.width = _w;
+      this.canvas.height = _h;
     }
 
     // clears the canvas. called only if "persist strokes" is off.
     clear(refreshThrottle) {
-      this.ctx.clearRect(0, 0, innerWidth, innerHeight);
+      this.ctx.clearRect(0, 0, _w, _h);
     }
 
     // a helper method that gathers particle groups into a queue to be rendered, instead of looping over all particle groups (and particles) every time
@@ -239,32 +239,34 @@ window.addEventListener('load', ()=>{
         // loop through the queued group's particles
         for (let j = 0; j < pGroup.particles.length; j++) {
           let particle = pGroup.particles[j];
+
+          if (particle.lifetime <= 0) { continue; }
+
           this.ctx.lineWidth = particle.size;
           
-          if (particle.lifetime > 0) {
-            // draw reflections first
-            // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
-            let height = Math.abs(particle.z - particle.y);
-            if (enableFloor && enableReflections && height < reflectThreshold) {
-              let heightFalloff = 1 - (height / (reflectThreshold));  // heightFalloff is a ratio for most of these properties; closer to the ground = more effect
-              this.ctx.strokeStyle = `hsla(${pGroup.hue}, 100%, ${particle.lightness}%, ${0.4 * heightFalloff * heightFalloff})`;
-              
-              // draw the reflection based on the reflected point's distance from the particle's z-position
-              this.ctx.beginPath();
-              this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - particle.prevY) * 2));
-              this.ctx.lineTo(particle.x, particle.y + ((particle.z - particle.y) * 2));
-              this.ctx.stroke();
-            }
-
-            // draw particles themselves next. particles are drawn after reflections to ensure that actual particle graphics are prioritized
+          // draw reflections first
+          // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
+          let height = Math.abs(particle.z - particle.y);
+          
+          if (enableFloor && enableReflections && height < reflectThreshold) {
+            let heightFalloff = 1 - (height / (reflectThreshold));  // heightFalloff is a ratio for most of these properties; closer to the ground = more effect
+            this.ctx.strokeStyle = `hsla(${pGroup.hue}, 100%, ${particle.lightness}%, ${0.4 * heightFalloff * heightFalloff})`;
+            
+            // draw the reflection based on the reflected point's distance from the particle's z-position
             this.ctx.beginPath();
-            this.ctx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
-    
-            // if drawStrokes is set, draw a line from prevX/Y to current x/y
-            this.ctx.moveTo(particle.prevX, particle.prevY);
-            this.ctx.lineTo(particle.x, particle.y);
+            this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - particle.prevY) * 2) + 2);
+            this.ctx.lineTo(particle.x, particle.y + ((particle.z - particle.y) * 2) + 2);
             this.ctx.stroke();
           }
+
+
+          // draw particles themselves next. particles are drawn after reflections to ensure that actual particle graphics are prioritized
+          this.ctx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
+  
+          this.ctx.beginPath();
+          this.ctx.moveTo(particle.prevX, particle.prevY);
+          this.ctx.lineTo(particle.x, particle.y);
+          this.ctx.stroke();
         }
       }
     }
@@ -277,14 +279,16 @@ window.addEventListener('load', ()=>{
   /*******************************************************************************/
   
   let gravity = 1.7;              // pretty self-explanatory, but this feels like a good value
-  let airResistance = 0.002;        // particles slow down by this factor the longer they are in the air
-  let particlesPerBlast = 60;      // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
+  let airResistance = 0.002;      // particles slow down by this factor the longer they are in the air
+  let particlesPerBlast = 60;     // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
   let newBurstTimer = 30;         // the timer that will allow new particle bursts to form automatically
-  let reflectThreshold = 300;     // the threshold for when reflections will appear on the ground
+  let reflectThreshold = 200;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
-  let autoBursts = false;          // user toggleable variable that enables automatic bursts
+  let autoBursts = true;          // user toggleable variable that enables automatic bursts
+  let _w = innerWidth;
+  let _h = innerHeight;
 
   let rng = new RNG();
   let renderer = new Renderer(document.getElementById('canvas'));
@@ -395,8 +399,8 @@ window.addEventListener('load', ()=>{
 
   // procedurally generate particles if the user isn't interacting
   function autoPopulate() {
-    particleBurst(100 + (rng.value() * (innerWidth / 2)) + (innerWidth / 4),
-                  100 + (rng.value() * (2 * innerHeight / 3)),
+    particleBurst(100 + (rng.value() * (_w / 2)) + (_w / 4),
+                  100 + (rng.value() * (2 * _h / 3)),
                   rng.value() * 360);
   }
   
@@ -412,7 +416,7 @@ window.addEventListener('load', ()=>{
   let tempRefreshThrottle = 0;
 
   // push a new particle group onto the list to kick things off
-  particleGroups.push(new ParticleGroup(innerWidth / 2, innerHeight / 3, rng.value() * 360));
+  particleGroups.push(new ParticleGroup(_w / 2, _h / 3, rng.value() * 360));
 
   function animate(callbackTime) {
     // target 30fps by dividing the time between rAF calls by 30 to calculate per-frame movement
