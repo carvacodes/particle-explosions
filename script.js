@@ -1,6 +1,8 @@
 window.addEventListener('load', ()=>{
   /*******************************************************************************/
+  /*                                                                             */
   /*                                   Classes                                   */
+  /*                                                                             */
   /*******************************************************************************/
 
   //////////////////////////
@@ -70,14 +72,14 @@ window.addEventListener('load', ()=>{
 
     // this method runs for all of a group's particles when it is still being rendered
     // particles have internal logic in their move() method to handle their own specifics and math
-    stepParticles(frameDuration) {
+    stepParticles(refreshThrottle) {
       let continueRendering = false;
 
       for (let i = 0; i < this.particles.length; i++) {
         let particle = this.particles[i];
         if (particle.lifetime > 0 ) {
           if (!continueRendering) { continueRendering = true; }
-          particle.move(frameDuration);
+          particle.move(refreshThrottle);
         }
       }
 
@@ -105,7 +107,9 @@ window.addEventListener('load', ()=>{
       this.xSpeed;          // speed info
       this.ySpeed;
       this.zSpeed;
-      this.lifetime;        // the particle's lifetime decrements by one at every move() call, and it is skipped for processing and rendering if lifetime <= 0
+      this.airborne;        // once y speed reaches a negligible amount, set this boolean to false
+      this.lifetime;        // the particle's lifetime drops at every move() call, and it is skipped for processing and rendering if lifetime <= 0
+      this.prevLifetime;    // the particle's lifetime on the previous move() call
       this.lightness;       // handles the individual coloration of a particle (since its hue is managed by its parent particleGroup)
       this.size;            // the weight of the particle, which ends up being its lineWidth in context.stroke operations
 
@@ -114,59 +118,82 @@ window.addEventListener('load', ()=>{
 
     // resets and re-randomizes the particle's values. used at instantiation and when the parent particleGroup moves
     resetValues() {
-      this.lifetime = 80 + Math.round(rng.value() * 40);  // particles will automatically be culled when their lifetime hits zero
+      this.lifetime = 60 + Math.round(rng.value() * 30);  // particles will automatically be culled when their lifetime hits zero
+      this.prevLifetime = this.lifetime;
       this.lightness = Math.round(60 + rng.value() * 40); // added lightness for more variety
       this.size = Math.ceil(rng.value() * 2);                        // controls the stroke or rect size, depending on the particle render type currently chosen
       this.z = Math.max((4 * innerHeight / 5) + Math.round(rng.value() * innerHeight / 12), this.y);  // simulates depth (see move/render methods)
-      this.xSpeed = 5 + rng.value() * - 10;       // speed variables
-      this.ySpeed = 5 + rng.value() * - 10;       // for each axis
-      this.zSpeed = 0.4 + rng.value() * - 0.8;    // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
+      this.xSpeed = 8 + (rng.value() * -16);      // speed variables
+      this.ySpeed = 11 + (rng.value() * -22);      // for each axis
+      this.zSpeed = 0.5 + (rng.value() * -1);      // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
+      this.airborne = true;
       this.prevX = this.x;
       this.prevY = this.y;
       this.prevZ = this.z;
     }
 
     // move functions for the particle. the amount of movement is adjusted by the last requestAnimationFrame call's duration.
-    move(frameDuration) {
-      // target 16.667ms/frame for speeds. this frameSpeedFactor will change how much each speed and position variable changes,
-      // which should help ensure a more consistent experience across devices and browsers
-      let frameSpeedFactor = frameDuration / 16.667;
+    move(refreshThrottle) {
+      this.lifetime -= refreshThrottle;
 
-      // lifetime can be handled first, since it will always change
-      this.lifetime -= 1 * frameSpeedFactor;
-
-      // immediately stop rendering or processing any particles outside the viewport
-      if (this.x < 0 || this.x > innerWidth || this.y > innerHeight) {
+      // no further processing for particles outside the viewport or whose lifetime is 0 or less
+      if (this.x < 0 || this.x > innerWidth || this.y > innerHeight || this.lifetime <= 0) {
         this.lifetime = -1;
+        return;
       }
-
-      // set prevX/Y before moving for stroke-style rendering
+      
       this.prevX = this.x;
       this.prevY = this.y;
       this.prevZ = this.z;
-      // add x speed straight away
-      this.x += this.xSpeed * frameSpeedFactor;
-      this.xSpeed *= enableFloor ? friction : 1;
-      
-      this.y += this.ySpeed * frameSpeedFactor;  // add the ySpeed to the y position
 
-      // z-position logic only applies when the floor is enabled; return here if floors aren't enabled
-      if (!enableFloor) { return };
-
-      // allow the this to speed up if its y position hasn't reached its z position; 
-      if (this.y < this.z) {
-        this.ySpeed = this.ySpeed + (gravity * gravity * frameSpeedFactor); 
+      // if floors are not enabled, do a flat application of the x/y speeds to the particle's coords. no change to speed here.
+      if (!enableFloor) {
+        this.x += this.xSpeed * refreshThrottle;
+        this.y += this.ySpeed * refreshThrottle;
+        this.z += this.zSpeed * refreshThrottle;
+        return;
       }
 
-      // if the y position has reached the z position, bounce (ySpeed * -0.5)
-      if (this.y + this.ySpeed > this.z) {
-        this.y = this.z;
-        this.ySpeed *= -0.5;
-      }
+      /*
+      3 conditions:
+      on the ground -> your current ySpeed is negligible and your distance to z is negligible
+      bouncing -> your next proposed y position is greater than your z position, and your current or proposed y speeds are large.
+      free fall -> your next proposed y position is less than your z position
+      */
+      let proposedY = this.y + this.ySpeed;
+      let proposedYSpeed = this.ySpeed - (this.ySpeed * airResistance) + gravity;
+      let proposedZ = this.z + this.zSpeed;
+      let proposedZSpeed = this.zSpeed - (this.zSpeed * airResistance);
 
-      // increase the z position by zSpeed on every frame, but decrease zSpeed by the friction coefficient
-      this.z += this.zSpeed * frameSpeedFactor;
-      this.zSpeed *= friction;
+      if (proposedY < proposedZ) {
+        // free fall
+        // set speeds
+        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance);
+        this.ySpeed = proposedYSpeed;
+        this.zSpeed = proposedZSpeed;
+        
+        // set coords
+        this.x += this.xSpeed;
+        this.y += this.ySpeed + this.zSpeed;
+        this.z += this.zSpeed;
+      } else {
+        // bounce
+        // since a bounce interrupts what would be a full y axis displacement,
+        // we need to move only a proportion of the final position
+        // this value can be calculated as the amount of movement allowed divided by the full proposed movement
+        let movementProportion = Math.abs((this.y - this.z) / proposedYSpeed);
+        
+        // set speeds
+        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance);
+        this.ySpeed = -0.6 * proposedYSpeed;
+        this.zSpeed = proposedZSpeed;
+        
+        // set coords
+        // we also need to snap the particle's y position to its z position and to the proportion-affected x-position
+        this.x += this.xSpeed * movementProportion;
+        this.z += this.zSpeed;
+        this.y = this.z + this.zSpeed;
+      }
     }
   }
 
@@ -179,13 +206,14 @@ window.addEventListener('load', ()=>{
       this.canvas = canvas;
       this.ctx = this.canvas.getContext('2d');
       this.renderQueue = [];
+      this.clearTimer = 0;
 
       this.canvas.width = window.innerWidth;
       this.canvas.height = window.innerHeight;
     }
 
-    // clears the screen every frame. called only if "persist strokes" is off (as dictated within the animation frame logic)
-    clear() {
+    // clears the canvas. called only if "persist strokes" is off.
+    clear(refreshThrottle) {
       this.ctx.clearRect(0, 0, innerWidth, innerHeight);
     }
 
@@ -195,7 +223,11 @@ window.addEventListener('load', ()=>{
     }
 
     // draws particle groups that are currently rendering
-    render() {
+    render(refreshThrottle) {
+      if (!persistStrokes) {
+        this.clear(refreshThrottle);
+      }
+
       while (this.renderQueue.length > 0) {
         // shift the particleGroup off the render queue. this method exits when the render queue is empty
         let pGroup = this.renderQueue.pop();
@@ -219,8 +251,8 @@ window.addEventListener('load', ()=>{
               
               // draw the reflection based on the reflected point's distance from the particle's z-position
               this.ctx.beginPath();
-              this.ctx.moveTo(particle.prevX, particle.prevY + (particle.prevZ - particle.prevY) * 2);
-              this.ctx.lineTo(particle.x, particle.y + (particle.z - particle.y) * 2);
+              this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - particle.prevY) * 2));
+              this.ctx.lineTo(particle.x, particle.y + ((particle.z - particle.y) * 2));
               this.ctx.stroke();
             }
 
@@ -239,25 +271,29 @@ window.addEventListener('load', ()=>{
   }
 
   /*******************************************************************************/
+  /*                                                                             */
   /*                                   Globals                                   */
+  /*                                                                             */
   /*******************************************************************************/
   
   let gravity = 0.6;              // pretty self-explanatory, but this feels like a good value
-  let friction = 0.999;           // this restricts particle movement along the X and Z axes just a touch, subtly imparting a more natural appearance
-  let particlesPerBlast = 60;     // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
-  let newBurstTimer = 60;         // the timer that will allow new particle bursts to form automatically
+  let airResistance = 0.001;        // particles slow down by this factor the longer they are in the air
+  let particlesPerBlast = 60;      // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
+  let newBurstTimer = 30;         // the timer that will allow new particle bursts to form automatically
   let reflectThreshold = 300;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
-  let autoBursts = true;          // user toggleable variable that enables automatic bursts
+  let autoBursts = false;          // user toggleable variable that enables automatic bursts
 
   let rng = new RNG();
   let renderer = new Renderer(document.getElementById('canvas'));
   let particleGroups = [];
   
   /*******************************************************************************/
+  /*                                                                             */
   /*                                  Listeners                                  */
+  /*                                                                             */
   /*******************************************************************************/
   // on every click, create a particle burst at that position
   document.addEventListener('mousedown', createParticleBurst);
@@ -316,10 +352,11 @@ window.addEventListener('load', ()=>{
     e.stopImmediatePropagation();
     renderer.clear();
   })
-
   
   /*******************************************************************************/
+  /*                                                                             */
   /*                                  Functions                                  */
+  /*                                                                             */
   /*******************************************************************************/
 
   // this function tries to reuse an existing particle burst if it's not currently being rendered to save on extra object instantiations
@@ -353,7 +390,7 @@ window.addEventListener('load', ()=>{
     }
     if (event.changedTouches) { event.preventDefault(); }   // as promised: preventDefault on touch events
     particleBurst(e.clientX, e.clientY);
-    newBurstTimer = 120;
+    newBurstTimer = 60;   // wait two seconds after the last user-initiated burst
   }
 
   // procedurally generate particles if the user isn't interacting
@@ -361,56 +398,54 @@ window.addEventListener('load', ()=>{
     particleBurst(100 + (rng.value() * (innerWidth / 2)) + (innerWidth / 4),
                   100 + (rng.value() * (2 * innerHeight / 3)),
                   rng.value() * 360);
-    newBurstTimer = 60;
   }
-
   
   /*******************************************************************************/
+  /*                                                                             */
   /*                               Animation Loop                                */
+  /*                                                                             */
   /*******************************************************************************/
 
-  // currentTime (and the frameTime var within the animate() function) caps the frame rate at 60fps
-  let lastFrameStart = document.timeline.currentTime;
+  // these variables will adjust movement speed to match the frame rate of the device (the time between rAF calls)
+  let firstFrameTime = performance.now();
+  let refreshThrottle = 1;
+  let tempRefreshThrottle = 0;
+
+  // push a new particle group onto the list to kick things off
   particleGroups.push(new ParticleGroup(innerWidth / 2, innerHeight / 3, rng.value() * 360));
 
-  function animate(lastCallbackTime) {
-    // prepare the next animation frame
-    window.requestAnimationFrame(animate);
+  function animate(callbackTime) {
+    // target 30fps by dividing the time between rAF calls by 30 to calculate per-frame movement
+    tempRefreshThrottle = callbackTime - firstFrameTime;
+    firstFrameTime = callbackTime || 0;
+    refreshThrottle = tempRefreshThrottle / 30;
 
-    const frameTime = lastCallbackTime - lastFrameStart;
-    lastFrameStart = lastCallbackTime;
-    
     // if the user has autoburst enabled
     if (autoBursts) {
-      // if the newBurstTimer timer has reached zero, autopopulate
+    // if the newBurstTimer timer has reached zero, autopopulate
       if (newBurstTimer > 0) {
-        newBurstTimer--;
-      }
-      if (newBurstTimer <= 0) {
+        newBurstTimer -= refreshThrottle;
+      } else if (newBurstTimer <= 0) {
         autoPopulate();
-        newBurstTimer = 60 / (frameTime / 16.667);  // makes sure the timer goes off once per second (after roughly 60 frames)
+        newBurstTimer = 30;  // set off a particle burst every second
       }
     }
-
-    // clear the canvas if persist stroke is off
-    if (!persistStrokes) { renderer.clear(); }
         
     // loop particleGroups
     for (let i = 0; i < particleGroups.length; i++) {
       let pGroup = particleGroups[i];
       // if a particle group is still rendering (it has at least one particle with a lifetime > 0), update its particles' positions and queue it for rendering
       if (pGroup.rendering) {
-        pGroup.stepParticles(frameTime);
+        pGroup.stepParticles(refreshThrottle);
         pGroup.queueForRender(renderer);
-        renderFrame = true;
       }
     }
 
-    // let the renderer run
-    renderer.render();
-
+    // render, passing the calculated refreshThrottle. This will help set appropriate line thicknesses for particle rendering
+    renderer.render(refreshThrottle);
+    window.requestAnimationFrame(animate);
   }
 
   // at last: init!
-  animate();
+  window.requestAnimationFrame(animate);
 });
