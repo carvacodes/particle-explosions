@@ -6,6 +6,11 @@ body {
   bottom: 0;
 }
 
+canvas {
+  height: 100%;
+  width: 100vw;
+}
+
 .floor {
   z-index: -100;
   width: 100vw;

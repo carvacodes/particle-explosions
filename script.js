@@ -123,9 +123,9 @@ window.addEventListener('load', ()=>{
       this.lightness = Math.round(60 + rng.value() * 40); // added lightness for more variety
       this.size = Math.ceil(rng.value() * 2);                        // controls the stroke or rect size, depending on the particle render type currently chosen
       this.z = Math.max((4 * _h / 5) + Math.round(rng.value() * _h / 12), this.y);  // simulates depth (see move/render methods)
-      this.xSpeed = 11 + (rng.value() * -22);      // speed variables
-      this.ySpeed = 16 + (rng.value() * -32);      // for each axis
-      this.zSpeed = 0.5 + (rng.value() * -1);      // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
+      this.xSpeed = (11 + (rng.value() * -22)) * window.devicePixelRatio;      // speed variables
+      this.ySpeed = (16 + (rng.value() * -32)) * window.devicePixelRatio;      // for each axis
+      this.zSpeed = (0.5 + (rng.value() * -1)) * window.devicePixelRatio;      // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
       this.airborne = true;
       this.prevX = this.x;
       this.prevY = this.y;
@@ -233,7 +233,7 @@ window.addEventListener('load', ()=>{
         let pGroup = this.renderQueue.pop();
 
         // create a shadow underneath the particle
-        this.ctx.shadowBlur = 3;
+        this.ctx.shadowBlur = 3 * window.devicePixelRatio;
         this.ctx.shadowColor = `hsl(${pGroup.hue}, 100%, 85%)`;
 
         // loop through the queued group's particles
@@ -242,7 +242,7 @@ window.addEventListener('load', ()=>{
 
           if (particle.lifetime <= 0) { continue; }
 
-          this.ctx.lineWidth = particle.size;
+          this.ctx.lineWidth = particle.size * window.devicePixelRatio;
           
           // draw reflections first
           // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
@@ -250,7 +250,7 @@ window.addEventListener('load', ()=>{
           
           if (enableFloor && enableReflections && height < reflectThreshold) {
             let heightFalloff = 1 - (height / (reflectThreshold));  // heightFalloff is a ratio for most of these properties; closer to the ground = more effect
-            this.ctx.strokeStyle = `hsla(${pGroup.hue}, 100%, ${particle.lightness}%, ${0.4 * heightFalloff * heightFalloff})`;
+            this.ctx.strokeStyle = `hsla(${pGroup.hue}, 100%, ${particle.lightness}%, ${0.3 * heightFalloff})`;
             
             // draw the reflection based on the reflected point's distance from the particle's z-position
             this.ctx.beginPath();
@@ -278,17 +278,17 @@ window.addEventListener('load', ()=>{
   /*                                                                             */
   /*******************************************************************************/
   
-  let gravity = 1.7;              // pretty self-explanatory, but this feels like a good value
-  let airResistance = 0.002;      // particles slow down by this factor the longer they are in the air
+  let gravity = 1.7 * window.devicePixelRatio;              // pretty self-explanatory, but this feels like a good value
+  let airResistance = 0.002 * window.devicePixelRatio;      // particles slow down by this factor the longer they are in the air
   let particlesPerBlast = 60;     // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
-  let newBurstTimer = 30;         // the timer that will allow new particle bursts to form automatically
-  let reflectThreshold = 200;     // the threshold for when reflections will appear on the ground
+  let newBurstTimer = 60;         // the timer that will allow new particle bursts to form automatically
+  let reflectThreshold = 200 * window.devicePixelRatio;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
   let autoBursts = true;          // user toggleable variable that enables automatic bursts
-  let _w = innerWidth;
-  let _h = innerHeight;
+  let _w = innerWidth * window.devicePixelRatio;
+  let _h = innerHeight * window.devicePixelRatio;
 
   let rng = new RNG();
   let renderer = new Renderer(document.getElementById('canvas'));
@@ -303,6 +303,8 @@ window.addEventListener('load', ()=>{
   document.addEventListener('mousedown', createParticleBurst);
   document.addEventListener('touchstart', createParticleBurst, {passive: false});
   document.addEventListener('touchmove', (e) => {e.preventDefault()}, {passive: false});
+
+  window.addEventListener('resize', () => { window.location.reload(); })
 
   // get the relevant button objects
   let enableReflectionsButton = document.getElementById('enableReflectionsButton');
@@ -393,7 +395,7 @@ window.addEventListener('load', ()=>{
       return;
     }
     if (event.changedTouches) { event.preventDefault(); }   // as promised: preventDefault on touch events
-    particleBurst(e.clientX, e.clientY);
+    particleBurst(e.clientX * window.devicePixelRatio, e.clientY * window.devicePixelRatio);
     newBurstTimer = 60;   // wait two seconds after the last user-initiated burst
   }
 
@@ -431,7 +433,7 @@ window.addEventListener('load', ()=>{
         newBurstTimer -= refreshThrottle;
       } else if (newBurstTimer <= 0) {
         autoPopulate();
-        newBurstTimer = 30;  // set off a particle burst every second
+        newBurstTimer = 60;  // set off a particle burst every second
       }
     }
         
