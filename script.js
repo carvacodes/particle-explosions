@@ -203,23 +203,38 @@ window.addEventListener('load', ()=>{
   // handles drawing functions for particle groups and particles. contains the canvas and context that will be used for drawing
   class Renderer {
     constructor(canvas) {
-      this.canvas = canvas;
-      this.ctx = this.canvas.getContext('2d');
       this.renderQueue = [];
       this.clearTimer = 0;
 
+      this.canvas = canvas;
+      this.ctx = this.canvas.getContext('2d');
       this.canvas.width = _w;
       this.canvas.height = _h;
+
+      this.glowCanvas = document.createElement('CANVAS');
+      this.glowCanvas.id = 'glowCanvas';
+      this.glowCanvas.style.filter = 'blur(3px) brightness(1.1) contrast(1.2)';
+      this.glowCanvas.style.opacity = '0.6';
+      this.glowCtx = this.glowCanvas.getContext('2d');
+      this.glowCanvas.width = _w;
+      this.glowCanvas.height = _h;
+
+      document.body.appendChild(this.glowCanvas);
     }
 
     // clears the canvas. called only if "persist strokes" is off.
-    clear(refreshThrottle) {
+    clear() {
       this.ctx.clearRect(0, 0, _w, _h);
     }
 
     // a helper method that gathers particle groups into a queue to be rendered, instead of looping over all particle groups (and particles) every time
     enqueue(groupToRender) {
       this.renderQueue.push(groupToRender);
+    }
+
+    renderGlow() {
+      let imgData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+      this.glowCtx.putImageData(imgData, 0, 0);
     }
 
     // draws particle groups that are currently rendering
@@ -231,10 +246,6 @@ window.addEventListener('load', ()=>{
       while (this.renderQueue.length > 0) {
         // shift the particleGroup off the render queue. this method exits when the render queue is empty
         let pGroup = this.renderQueue.pop();
-
-        // create a shadow underneath the particle
-        this.ctx.shadowBlur = 3 * window.devicePixelRatio;
-        this.ctx.shadowColor = `hsl(${pGroup.hue}, 100%, 85%)`;
 
         // loop through the queued group's particles
         for (let j = 0; j < pGroup.particles.length; j++) {
@@ -259,7 +270,6 @@ window.addEventListener('load', ()=>{
             this.ctx.stroke();
           }
 
-
           // draw particles themselves next. particles are drawn after reflections to ensure that actual particle graphics are prioritized
           this.ctx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
   
@@ -269,6 +279,8 @@ window.addEventListener('load', ()=>{
           this.ctx.stroke();
         }
       }
+
+      this.renderGlow();
     }
   }
 
@@ -280,7 +292,7 @@ window.addEventListener('load', ()=>{
   
   let gravity = 1.7 * window.devicePixelRatio;              // pretty self-explanatory, but this feels like a good value
   let airResistance = 0.002 * window.devicePixelRatio;      // particles slow down by this factor the longer they are in the air
-  let particlesPerBlast = 60;     // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
+  let particlesPerBlast = 100;     // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
   let newBurstTimer = 60;         // the timer that will allow new particle bursts to form automatically
   let reflectThreshold = 200 * window.devicePixelRatio;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines

@@ -2,13 +2,13 @@ body {
   margin: 0;
   overflow: hidden;
   background: black;
-  position: fixed;
   bottom: 0;
 }
 
 canvas {
   height: 100%;
   width: 100vw;
+  position: fixed;
 }
 
 .floor {
@@ -49,6 +49,7 @@ canvas {
 }
 
 .controls {
+  z-index: 100;
   position: fixed;
   top: 3px;
   left: 0;
