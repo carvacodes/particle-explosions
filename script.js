@@ -213,8 +213,8 @@ window.addEventListener('load', ()=>{
 
       this.glowCanvas = document.createElement('CANVAS');
       this.glowCanvas.id = 'glowCanvas';
-      this.glowCanvas.style.filter = 'blur(3px) brightness(1.1) contrast(1.2)';
-      this.glowCanvas.style.opacity = '0.6';
+      this.glowCanvas.style.filter = 'blur(2px) brightness(1.1) contrast(1.2)';
+      this.glowCanvas.style.opacity = '0.7';
       this.glowCtx = this.glowCanvas.getContext('2d');
       this.glowCanvas.width = _w;
       this.glowCanvas.height = _h;
