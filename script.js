@@ -142,6 +142,7 @@ window.addEventListener('load', ()=>{
         return;
       }
       
+      // store previous position values
       this.prevX = this.x;
       this.prevY = this.y;
       this.prevZ = this.z;
@@ -165,7 +166,17 @@ window.addEventListener('load', ()=>{
       let proposedZ = this.z + this.zSpeed * refreshThrottle;
       let proposedZSpeed = this.zSpeed - (this.zSpeed * airResistance * refreshThrottle);
 
-      if (proposedY < proposedZ) {
+      if (!this.airborne) {
+        // on the ground
+        // set speeds
+        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
+        this.zSpeed = proposedZSpeed;
+        
+        // set coords
+        this.x += this.xSpeed * refreshThrottle;
+        this.y += this.zSpeed * refreshThrottle;
+        this.z += this.zSpeed * refreshThrottle;
+      } else if (proposedY < proposedZ) {
         // free fall
         // set speeds
         this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
@@ -181,8 +192,11 @@ window.addEventListener('load', ()=>{
         // since a bounce interrupts what would be a full y axis displacement,
         // we need to move only a proportion of the final position
         // this value can be calculated as the amount of movement allowed divided by the full proposed movement
-        let movementProportion = Math.abs((this.y - this.z) / proposedYSpeed);
+        let movementProportion = Math.abs((this.y - this.z) / proposedYSpeed) / refreshThrottle;
         
+        // hold on to the previous ySpeed, so calculations can be done for airbornedness
+        let prevYSpeed = this.ySpeed;
+
         // set speeds
         this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
         this.ySpeed = (-0.6) * proposedYSpeed;
@@ -193,6 +207,11 @@ window.addEventListener('load', ()=>{
         this.x += this.xSpeed * movementProportion * refreshThrottle;
         this.z += this.zSpeed * refreshThrottle;
         this.y = this.z + this.zSpeed * refreshThrottle;
+
+        // if the resulting bounce speed is less than gravity, set the particle to no longer airborne
+        if (Math.abs(Math.abs(this.ySpeed) - Math.abs(prevYSpeed)) < gravity) {
+          this.airborne = false;
+        }
       }
     }
   }
@@ -206,8 +225,9 @@ window.addEventListener('load', ()=>{
       this.renderQueue = [];
       this.clearTimer = 0;
 
+      // primary canvas for drawing
       this.canvas = canvas;
-      this.ctx = this.canvas.getContext('2d');
+      this.ctx = this.canvas.getContext('2d', {willReadFrequently: true});
       this.canvas.width = _w;
       this.canvas.height = _h;
 
@@ -253,7 +273,7 @@ window.addEventListener('load', ()=>{
 
           if (particle.lifetime <= 0) { continue; }
 
-          this.ctx.lineWidth = particle.size * window.devicePixelRatio;
+          this.ctx.lineWidth = particle.size;
           
           // draw reflections first
           // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
@@ -264,9 +284,17 @@ window.addEventListener('load', ()=>{
             this.ctx.strokeStyle = `hsla(${pGroup.hue}, 100%, ${particle.lightness}%, ${0.3 * heightFalloff})`;
             
             // draw the reflection based on the reflected point's distance from the particle's z-position
+            // this.ctx.beginPath();
+            // this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - particle.prevY) * 2) + 2);
+            // this.ctx.lineTo(particle.x, particle.y + ((particle.z - particle.y) * 2) + 2);
+            // this.ctx.stroke();
+
+            // this.ctx.strokeRect(particle.x - particle.size / 2, (particle.y - particle.size / 2) + ((particle.z - (particle.y - particle.size / 2)) * 2) + 2, particle.size, particle.size)
+            // this.ctx.strokeRect(particle.prevX - particle.size / 2, (particle.prevY - particle.size / 2) + ((particle.prevZ - (particle.prevY - particle.size / 2)) * 2) + 2, particle.size, particle.size)
+            
             this.ctx.beginPath();
-            this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - particle.prevY) * 2) + 2);
-            this.ctx.lineTo(particle.x, particle.y + ((particle.z - particle.y) * 2) + 2);
+            this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + 2);
+            this.ctx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + 2);
             this.ctx.stroke();
           }
 
@@ -277,6 +305,9 @@ window.addEventListener('load', ()=>{
           this.ctx.moveTo(particle.prevX, particle.prevY);
           this.ctx.lineTo(particle.x, particle.y);
           this.ctx.stroke();
+
+          // this.ctx.strokeRect(particle.x - particle.size / 2, particle.y - particle.size / 2, particle.size, particle.size)
+          // this.ctx.strokeRect(particle.prevX - particle.size / 2, particle.prevY - particle.size / 2, particle.size, particle.size)
         }
       }
 
@@ -298,7 +329,7 @@ window.addEventListener('load', ()=>{
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
-  let autoBursts = true;          // user toggleable variable that enables automatic bursts
+  let autoBursts = false;          // user toggleable variable that enables automatic bursts
   let _w = innerWidth * window.devicePixelRatio;
   let _h = innerHeight * window.devicePixelRatio;
 
