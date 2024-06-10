@@ -273,7 +273,7 @@ window.addEventListener('load', ()=>{
 
           if (particle.lifetime <= 0) { continue; }
 
-          this.ctx.lineWidth = particle.size;
+          this.ctx.lineWidth = particle.size * window.devicePixelRatio;
           
           // draw reflections first
           // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
@@ -284,14 +284,6 @@ window.addEventListener('load', ()=>{
             this.ctx.strokeStyle = `hsla(${pGroup.hue}, 100%, ${particle.lightness}%, ${0.3 * heightFalloff})`;
             
             // draw the reflection based on the reflected point's distance from the particle's z-position
-            // this.ctx.beginPath();
-            // this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - particle.prevY) * 2) + 2);
-            // this.ctx.lineTo(particle.x, particle.y + ((particle.z - particle.y) * 2) + 2);
-            // this.ctx.stroke();
-
-            // this.ctx.strokeRect(particle.x - particle.size / 2, (particle.y - particle.size / 2) + ((particle.z - (particle.y - particle.size / 2)) * 2) + 2, particle.size, particle.size)
-            // this.ctx.strokeRect(particle.prevX - particle.size / 2, (particle.prevY - particle.size / 2) + ((particle.prevZ - (particle.prevY - particle.size / 2)) * 2) + 2, particle.size, particle.size)
-            
             this.ctx.beginPath();
             this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + 2);
             this.ctx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + 2);
@@ -305,9 +297,6 @@ window.addEventListener('load', ()=>{
           this.ctx.moveTo(particle.prevX, particle.prevY);
           this.ctx.lineTo(particle.x, particle.y);
           this.ctx.stroke();
-
-          // this.ctx.strokeRect(particle.x - particle.size / 2, particle.y - particle.size / 2, particle.size, particle.size)
-          // this.ctx.strokeRect(particle.prevX - particle.size / 2, particle.prevY - particle.size / 2, particle.size, particle.size)
         }
       }
 
@@ -323,13 +312,13 @@ window.addEventListener('load', ()=>{
   
   let gravity = 1.7 * window.devicePixelRatio;              // pretty self-explanatory, but this feels like a good value
   let airResistance = 0.002 * window.devicePixelRatio;      // particles slow down by this factor the longer they are in the air
-  let particlesPerBlast = 100;     // 60 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
+  let particlesPerBlast = 80;     // 80 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
   let newBurstTimer = 60;         // the timer that will allow new particle bursts to form automatically
   let reflectThreshold = 200 * window.devicePixelRatio;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
-  let autoBursts = false;          // user toggleable variable that enables automatic bursts
+  let autoBursts = true;          // user toggleable variable that enables automatic bursts
   let _w = innerWidth * window.devicePixelRatio;
   let _h = innerHeight * window.devicePixelRatio;
 
