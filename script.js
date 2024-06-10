@@ -231,10 +231,23 @@ window.addEventListener('load', ()=>{
       this.canvas.width = _w;
       this.canvas.height = _h;
 
+      // canvas for rendering reflections
+      this.reflectCanvas = document.createElement('CANVAS');
+      this.reflectCanvas.id = 'reflectCanvas';
+      this.reflectCanvas.style.filter = 'blur(0.5px) brightness(0.7)';
+      this.reflectCanvas.style.zIndex = '-1';
+      this.reflectCtx = this.reflectCanvas.getContext('2d', {willReadFrequently: true});
+      this.reflectCanvas.width = _w;
+      this.reflectCanvas.height = _h;
+
+      document.body.appendChild(this.reflectCanvas);
+
+      // canvas for rendering main canvas glow
       this.glowCanvas = document.createElement('CANVAS');
       this.glowCanvas.id = 'glowCanvas';
       this.glowCanvas.style.filter = 'blur(2px) brightness(1.1) contrast(1.2)';
       this.glowCanvas.style.opacity = '0.7';
+      this.glowCanvas.style.zIndex = '-2';
       this.glowCtx = this.glowCanvas.getContext('2d');
       this.glowCanvas.width = _w;
       this.glowCanvas.height = _h;
@@ -245,6 +258,8 @@ window.addEventListener('load', ()=>{
     // clears the canvas. called only if "persist strokes" is off.
     clear() {
       this.ctx.clearRect(0, 0, _w, _h);
+      this.reflectCtx.clearRect(0, 0, _w, _h);
+      this.glowCtx.clearRect(0, 0, _w, _h);
     }
 
     // a helper method that gathers particle groups into a queue to be rendered, instead of looping over all particle groups (and particles) every time
@@ -252,9 +267,10 @@ window.addEventListener('load', ()=>{
       this.renderQueue.push(groupToRender);
     }
 
+    // helper function that uses main canvas imageData to create a source image which can then be CSS-filtered
     renderGlow() {
-      let imgData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-      this.glowCtx.putImageData(imgData, 0, 0);
+      let baseImgData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+      this.glowCtx.putImageData(baseImgData, 0, 0);
     }
 
     // draws particle groups that are currently rendering
@@ -271,9 +287,12 @@ window.addEventListener('load', ()=>{
         for (let j = 0; j < pGroup.particles.length; j++) {
           let particle = pGroup.particles[j];
 
+          
           if (particle.lifetime <= 0) { continue; }
-
-          this.ctx.lineWidth = particle.size * window.devicePixelRatio;
+          
+          this.ctx.strokeStyle = this.ctx.fillStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
+          let renderedParticleSize = this.ctx.lineWidth = this.reflectCtx.lineWidth = particle.size * window.devicePixelRatio;
+          let halfParticleSize = renderedParticleSize / 2;
           
           // draw reflections first
           // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
@@ -281,22 +300,28 @@ window.addEventListener('load', ()=>{
           
           if (enableFloor && enableReflections && height < reflectThreshold) {
             let heightFalloff = 1 - (height / (reflectThreshold));  // heightFalloff is a ratio for most of these properties; closer to the ground = more effect
-            this.ctx.strokeStyle = `hsla(${pGroup.hue}, 100%, ${particle.lightness}%, ${0.3 * heightFalloff})`;
+            this.reflectCtx.strokeStyle = this.reflectCtx.fillStyle = `hsl(${pGroup.hue}, ${50 * heightFalloff}%, ${(particle.lightness * 0.25) + (particle.lightness * heightFalloff * 0.5)}%)`;
             
             // draw the reflection based on the reflected point's distance from the particle's z-position
-            this.ctx.beginPath();
-            this.ctx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + 2);
-            this.ctx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + 2);
-            this.ctx.stroke();
+            // use lineTo for persisted strokes
+            if (persistStrokes) {
+              this.reflectCtx.beginPath();
+              this.reflectCtx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + 2);
+              this.reflectCtx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + 2);
+              this.reflectCtx.stroke();
+            }
+            this.reflectCtx.fillRect((particle.x) - halfParticleSize, (particle.x, particle.y + ((particle.z - (particle.y )) * 2) + 2) - halfParticleSize, renderedParticleSize, renderedParticleSize);
           }
 
           // draw particles themselves next. particles are drawn after reflections to ensure that actual particle graphics are prioritized
-          this.ctx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
   
-          this.ctx.beginPath();
-          this.ctx.moveTo(particle.prevX, particle.prevY);
-          this.ctx.lineTo(particle.x, particle.y);
-          this.ctx.stroke();
+          if (persistStrokes) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(particle.prevX, particle.prevY);
+            this.ctx.lineTo(particle.x, particle.y);
+            this.ctx.stroke();
+          }
+          this.ctx.fillRect(particle.x - halfParticleSize, particle.y - halfParticleSize, renderedParticleSize, renderedParticleSize);
         }
       }
 
@@ -312,8 +337,8 @@ window.addEventListener('load', ()=>{
   
   let gravity = 1.7 * window.devicePixelRatio;              // pretty self-explanatory, but this feels like a good value
   let airResistance = 0.002 * window.devicePixelRatio;      // particles slow down by this factor the longer they are in the air
-  let particlesPerBlast = 80;     // 80 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
-  let newBurstTimer = 60;         // the timer that will allow new particle bursts to form automatically
+  let particlesPerBlast = 80;                               // 80 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
+  let newBurstTimer = 60;                                   // the timer that will allow new particle bursts to form automatically
   let reflectThreshold = 200 * window.devicePixelRatio;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
