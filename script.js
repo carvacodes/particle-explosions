@@ -152,65 +152,67 @@ window.addEventListener('load', ()=>{
         this.x += this.xSpeed * refreshThrottle;
         this.y += this.ySpeed * refreshThrottle;
         this.z += this.zSpeed * refreshThrottle;
-        return;
-      }
-
-      /*
-      3 conditions:
-      on the ground -> your current ySpeed is negligible and your distance to z is negligible
-      bouncing -> your next proposed y position is greater than your z position, and your current or proposed y speeds are large.
-      free fall -> your next proposed y position is less than your z position
-      */
-      let proposedY = this.y + this.ySpeed * refreshThrottle;
-      let proposedYSpeed = this.ySpeed - (this.ySpeed * airResistance * refreshThrottle) + (gravity * refreshThrottle);
-      let proposedZ = this.z + this.zSpeed * refreshThrottle;
-      let proposedZSpeed = this.zSpeed - (this.zSpeed * airResistance * refreshThrottle);
-
-      if (!this.airborne) {
-        // on the ground
-        // set speeds
-        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
-        this.zSpeed = proposedZSpeed;
-        
-        // set coords
-        this.x += this.xSpeed * refreshThrottle;
-        this.y += this.zSpeed * refreshThrottle;
-        this.z += this.zSpeed * refreshThrottle;
-      } else if (proposedY < proposedZ) {
-        // free fall
-        // set speeds
-        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
-        this.ySpeed = proposedYSpeed;
-        this.zSpeed = proposedZSpeed;
-        
-        // set coords
-        this.x += this.xSpeed * refreshThrottle;
-        this.y += (this.ySpeed * refreshThrottle) + (this.zSpeed * refreshThrottle);
-        this.z += this.zSpeed * refreshThrottle;
       } else {
-        // bounce
-        // since a bounce interrupts what would be a full y axis displacement,
-        // we need to move only a proportion of the final position
-        // this value can be calculated as the amount of movement allowed divided by the full proposed movement
-        let movementProportion = Math.abs((this.y - this.z) / proposedYSpeed) / refreshThrottle;
+        /*
+        3 conditions:
+        on the ground -> your current ySpeed is negligible and your distance to z is negligible
+        bouncing -> your next proposed y position is greater than your z position, and your current or proposed y speeds are large.
+        free fall -> your next proposed y position is less than your z position
+        */
+        let proposedY = this.y + this.ySpeed * refreshThrottle;
+        let proposedYSpeed = this.ySpeed - (this.ySpeed * airResistance * refreshThrottle) + (gravity * refreshThrottle);
+        let proposedZ = this.z + this.zSpeed * refreshThrottle;
+        let proposedZSpeed = this.zSpeed - (this.zSpeed * airResistance * refreshThrottle);
         
-        // hold on to the previous ySpeed, so calculations can be done for airbornedness
-        let prevYSpeed = this.ySpeed;
+        if (!this.airborne) {
+          if (this.y < _h * (72/100)) { this.lifetime = -1; }   // if the particle is above the reflective floor draw area, kill it
 
-        // set speeds
-        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
-        this.ySpeed = (-0.6) * proposedYSpeed;
-        this.zSpeed = proposedZSpeed;
-        
-        // set coords
-        // we also need to snap the particle's y position to its z position and to the proportion-affected x-position
-        this.x += this.xSpeed * movementProportion * refreshThrottle;
-        this.z += this.zSpeed * refreshThrottle;
-        this.y = this.z + this.zSpeed * refreshThrottle;
-
-        // if the resulting bounce speed is less than gravity, set the particle to no longer airborne
-        if (Math.abs(Math.abs(this.ySpeed) - Math.abs(prevYSpeed)) < gravity) {
-          this.airborne = false;
+          // on the ground
+          // set speeds
+          this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
+          this.zSpeed = proposedZSpeed;
+          
+          // set coords
+          this.x += this.xSpeed * refreshThrottle;
+          this.y += this.zSpeed * refreshThrottle;
+          this.z += this.zSpeed * refreshThrottle;
+        } else if (proposedY < proposedZ) {
+          // free fall
+          // set speeds
+          this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
+          this.ySpeed = proposedYSpeed;
+          this.zSpeed = proposedZSpeed;
+          
+          // set coords
+          this.x += this.xSpeed * refreshThrottle;
+          this.y += (this.ySpeed * refreshThrottle) + (this.zSpeed * refreshThrottle);
+          this.z += this.zSpeed * refreshThrottle;
+        } else {
+          // bounce
+          if (this.y < _h * (72/100)) { this.lifetime = -1; }   // if the particle is above the reflective floor draw area, kill it
+          // since a bounce interrupts what would be a full y axis displacement,
+          // we need to move only a proportion of the final position
+          // this value can be calculated as the amount of movement allowed divided by the full proposed movement
+          let movementProportion = Math.abs((this.y - this.z) / proposedYSpeed) / refreshThrottle;
+          
+          // hold on to the previous ySpeed, so calculations can be done for airbornedness
+          let prevYSpeed = this.ySpeed;
+          
+          // set speeds
+          this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
+          this.ySpeed = (-0.6) * proposedYSpeed;
+          this.zSpeed = proposedZSpeed;
+          
+          // set coords
+          // we also need to snap the particle's y position to its z position and to the proportion-affected x-position
+          this.x += this.xSpeed * movementProportion * refreshThrottle;
+          this.z += this.zSpeed * refreshThrottle;
+          this.y = this.z + this.zSpeed * refreshThrottle;
+          
+          // if the resulting bounce speed is less than gravity, set the particle to no longer airborne
+          if (Math.abs(Math.abs(this.ySpeed) - Math.abs(prevYSpeed)) < gravity) {
+            this.airborne = false;
+          }
         }
       }
     }
@@ -231,12 +233,19 @@ window.addEventListener('load', ()=>{
       this.canvas.width = _w;
       this.canvas.height = _h;
 
+      // canvas for efficient offscreen rendering
+      this.hiddenCanvas = document.createElement('CANVAS');
+      this.hiddenCanvas.id = 'hiddenCanvas';
+      this.hiddenCtx = this.hiddenCanvas.getContext('2d', {willReadFrequently: true});
+      this.hiddenCanvas.width = _w;
+      this.hiddenCanvas.height = _h;
+
       // canvas for rendering reflections
       this.reflectCanvas = document.createElement('CANVAS');
       this.reflectCanvas.id = 'reflectCanvas';
-      this.reflectCanvas.style.filter = 'blur(0.5px) brightness(0.7)';
+      this.reflectCanvas.style.filter = 'brightness(0.7) contrast(0.8)';
       this.reflectCanvas.style.zIndex = '-1';
-      this.reflectCtx = this.reflectCanvas.getContext('2d', {willReadFrequently: true});
+      this.reflectCtx = this.reflectCanvas.getContext('2d');
       this.reflectCanvas.width = _w;
       this.reflectCanvas.height = _h;
 
@@ -247,7 +256,7 @@ window.addEventListener('load', ()=>{
       this.glowCanvas.id = 'glowCanvas';
       this.glowCanvas.style.filter = 'blur(2px) brightness(1.1) contrast(1.2)';
       this.glowCanvas.style.opacity = '0.7';
-      this.glowCanvas.style.zIndex = '-2';
+      this.glowCanvas.style.zIndex = '0';
       this.glowCtx = this.glowCanvas.getContext('2d');
       this.glowCanvas.width = _w;
       this.glowCanvas.height = _h;
@@ -258,6 +267,7 @@ window.addEventListener('load', ()=>{
     // clears the canvas. called only if "persist strokes" is off.
     clear() {
       this.ctx.clearRect(0, 0, _w, _h);
+      this.hiddenCtx.clearRect(0, 0, _w, _h);
       this.reflectCtx.clearRect(0, 0, _w, _h);
       this.glowCtx.clearRect(0, 0, _w, _h);
     }
@@ -267,18 +277,7 @@ window.addEventListener('load', ()=>{
       this.renderQueue.push(groupToRender);
     }
 
-    // helper function that uses main canvas imageData to create a source image which can then be CSS-filtered
-    renderGlow() {
-      let baseImgData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-      this.glowCtx.putImageData(baseImgData, 0, 0);
-    }
-
-    // draws particle groups that are currently rendering
-    render(refreshThrottle) {
-      if (!persistStrokes) {
-        this.clear(refreshThrottle);
-      }
-
+    renderHidden() {
       while (this.renderQueue.length > 0) {
         // shift the particleGroup off the render queue. this method exits when the render queue is empty
         let pGroup = this.renderQueue.pop();
@@ -286,46 +285,58 @@ window.addEventListener('load', ()=>{
         // loop through the queued group's particles
         for (let j = 0; j < pGroup.particles.length; j++) {
           let particle = pGroup.particles[j];
-
+          let particleSize = particle.size * window.devicePixelRatio;
           
           if (particle.lifetime <= 0) { continue; }
+
+          if (particle.zSpeed < 0) {
+            this.hiddenCtx.globalCompositeOperation = this.reflectCtx.globalCompositeOperation = 'destination-over';
+          } else {
+            this.hiddenCtx.globalCompositeOperation = this.reflectCtx.globalCompositeOperation = 'source-over';
+          }
           
-          this.ctx.strokeStyle = this.ctx.fillStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
-          let renderedParticleSize = this.ctx.lineWidth = this.reflectCtx.lineWidth = particle.size * window.devicePixelRatio;
-          let halfParticleSize = renderedParticleSize / 2;
-          
+          this.hiddenCtx.lineCap = this.reflectCtx.lineCap = 'round';
+          this.hiddenCtx.lineWidth = this.reflectCtx.lineWidth = particleSize;
+          this.hiddenCtx.strokeStyle = this.reflectCtx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
           // draw reflections first
           // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
           let height = Math.abs(particle.z - particle.y);
-          
+
           if (enableFloor && enableReflections && height < reflectThreshold) {
-            let heightFalloff = 1 - (height / (reflectThreshold));  // heightFalloff is a ratio for most of these properties; closer to the ground = more effect
-            this.reflectCtx.strokeStyle = this.reflectCtx.fillStyle = `hsl(${pGroup.hue}, ${50 * heightFalloff}%, ${(particle.lightness * 0.25) + (particle.lightness * heightFalloff * 0.5)}%)`;
-            
             // draw the reflection based on the reflected point's distance from the particle's z-position
             // use lineTo for persisted strokes
-            if (persistStrokes) {
-              this.reflectCtx.beginPath();
-              this.reflectCtx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + 2);
-              this.reflectCtx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + 2);
-              this.reflectCtx.stroke();
-            }
-            this.reflectCtx.fillRect((particle.x) - halfParticleSize, (particle.x, particle.y + ((particle.z - (particle.y )) * 2) + 2) - halfParticleSize, renderedParticleSize, renderedParticleSize);
+            this.reflectCtx.beginPath();
+            this.reflectCtx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + particle.size + window.devicePixelRatio);
+            this.reflectCtx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + particle.size + window.devicePixelRatio);
+            this.reflectCtx.stroke();
           }
 
-          // draw particles themselves next. particles are drawn after reflections to ensure that actual particle graphics are prioritized
-  
-          if (persistStrokes) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(particle.prevX, particle.prevY);
-            this.ctx.lineTo(particle.x, particle.y);
-            this.ctx.stroke();
-          }
-          this.ctx.fillRect(particle.x - halfParticleSize, particle.y - halfParticleSize, renderedParticleSize, renderedParticleSize);
+          this.hiddenCtx.beginPath();
+          this.hiddenCtx.moveTo(particle.prevX, particle.prevY);
+          this.hiddenCtx.lineTo(particle.x, particle.y);
+          this.hiddenCtx.stroke();
         }
       }
+    }
+    
+    // helper function that uses main canvas imageData to create a source image which can then be CSS-filtered
+    renderGlow() {
+      let baseImgData = this.hiddenCtx.getImageData(0, 0, this.hiddenCanvas.width, this.hiddenCanvas.height);
+      this.glowCtx.putImageData(baseImgData, 0, 0);
+    }
 
+    // render the visible canvas from the hidden one
+    renderVisible() {
+      let baseImgData = this.hiddenCtx.getImageData(0, 0, this.hiddenCanvas.width, this.hiddenCanvas.height);
+      this.ctx.putImageData(baseImgData, 0, 0);
+    }
+
+    // draws particle groups that are currently rendering
+    render() {
+      if (!persistStrokes) { this.clear(); }
+      this.renderHidden();
       this.renderGlow();
+      this.renderVisible();
     }
   }
 
