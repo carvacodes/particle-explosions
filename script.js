@@ -38,7 +38,7 @@ window.addEventListener('load', ()=>{
       this.particles = [];
       this.rendering = true;
 
-      for (let i = 0; i < particlesPerBlast; i++) {
+      for (let i = 0; i < particlesPerBurst; i++) {
         this.particles.push(new Particle(this.x, this.y));
       }
     }
@@ -285,10 +285,10 @@ window.addEventListener('load', ()=>{
         // loop through the queued group's particles
         for (let j = 0; j < pGroup.particles.length; j++) {
           let particle = pGroup.particles[j];
-          let particleSize = particle.size * window.devicePixelRatio;
           
           if (particle.lifetime <= 0) { continue; }
-
+          
+          let particleSize = particle.size * window.devicePixelRatio;
           if (particle.zSpeed < 0) {
             this.hiddenCtx.globalCompositeOperation = this.reflectCtx.globalCompositeOperation = 'destination-over';
           } else {
@@ -321,7 +321,7 @@ window.addEventListener('load', ()=>{
     
     // helper function that uses main canvas imageData to create a source image which can then be CSS-filtered
     renderGlow() {
-      let baseImgData = this.hiddenCtx.getImageData(0, 0, this.hiddenCanvas.width, this.hiddenCanvas.height);
+      let baseImgData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
       this.glowCtx.putImageData(baseImgData, 0, 0);
     }
 
@@ -335,8 +335,8 @@ window.addEventListener('load', ()=>{
     render() {
       if (!persistStrokes) { this.clear(); }
       this.renderHidden();
-      this.renderGlow();
       this.renderVisible();
+      if (enableGlow) { this.renderGlow(); }
     }
   }
 
@@ -348,11 +348,12 @@ window.addEventListener('load', ()=>{
   
   let gravity = 1.7 * window.devicePixelRatio;              // pretty self-explanatory, but this feels like a good value
   let airResistance = 0.002 * window.devicePixelRatio;      // particles slow down by this factor the longer they are in the air
-  let particlesPerBlast = 80;                               // 80 is a reasonable size for the number of particles; straddles the line between boring to see and rough to process
+  let particlesPerBurst = 50;                               // particles per burst; user-configurable at low/med/high/extreme
   let newBurstTimer = 60;                                   // the timer that will allow new particle bursts to form automatically
   let reflectThreshold = 200 * window.devicePixelRatio;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
+  let enableGlow = true;          // user toggleable variable that shows or particle glow
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
   let autoBursts = true;          // user toggleable variable that enables automatic bursts
   let _w = innerWidth * window.devicePixelRatio;
@@ -375,56 +376,82 @@ window.addEventListener('load', ()=>{
   window.addEventListener('resize', () => { window.location.reload(); })
 
   // get the relevant button objects
-  let enableReflectionsButton = document.getElementById('enableReflectionsButton');
-  let enableFloorButton = document.getElementById('enableFloorButton');
-  let persistStrokesButton = document.getElementById('persistStrokesButton');
-  let autoBurstButton = document.getElementById('autoBurstButton');
-  let clearCanvasButton = document.getElementById('clearCanvasButton');
+  let particleCountButton = document.getElementById('particleCountButton');
   let floor = document.getElementsByClassName('floor')[0];
 
-  // just as on the tin for these three; stop immediate propagation in all to prevent particle bursts while clicking a button
-  enableReflectionsButton.addEventListener('click', (e) => {
-    e.stopImmediatePropagation();
-    if (!enableFloor) { return; }
-    enableReflections = enableReflections ? false : true;
-    enableReflectionsButton.classList.toggle('active');
-  })
+  // stop immediate propagation in clicks on buttons prevent particle bursts while clicking a button
+  document.addEventListener('click', (e) => {
+    if (e.target.tagName != 'BUTTON') { return; }
 
-  enableFloorButton.addEventListener('click', (e) => {
     e.stopImmediatePropagation();
-    enableFloor = enableFloor ? false : true;
-    enableFloorButton.classList.toggle('active');
-    floor.style.display = enableFloor ? 'initial' : 'none';
-    if (!enableFloor) {
-      enableReflectionsButton.classList.remove('active');
-      enableReflections = false;
-    } else {
-      enableReflectionsButton.classList.add('active');
-      enableReflections = true;
+
+    switch (e.target.id) {
+      case 'particleCountButton':
+        if (particlesPerBurst == 50) {            // currently at low; set to medium
+          particlesPerBurst = 100;
+          particleCountButton.innerText = 'Particle Count: Medium';
+          particleCountButton.className = 'count-med';
+        } else if (particlesPerBurst == 100) {    // currently at medium; set to high
+          particlesPerBurst = 250;
+          particleCountButton.innerText = 'Particle Count: High';
+          particleCountButton.className = 'count-high';
+        } else if (particlesPerBurst == 250) {    // currently at high; set to extreme
+          particlesPerBurst = 1000;
+          particleCountButton.innerText = 'Particle Count: Extreme';
+          particleCountButton.className = 'count-extreme';
+        } else if (particlesPerBurst == 1000) {   // currently at extreme; set to low
+          particlesPerBurst = 50;
+          particleCountButton.innerText = 'Particle Count: Low';
+          particleCountButton.className = 'count-low';
+        }
+        newBurstTimer = 60;
+        particleGroups = [];
+        particleGroups.push(new ParticleGroup(_w / 2, _h / 3, rng.value() * 360));
+      break;
+      case 'enableReflectionsButton':
+        if (!enableFloor) { return; }
+        enableReflections = enableReflections ? false : true;
+        enableReflectionsButton.classList.toggle('active');
+      break;
+      case 'enableFloorButton':
+        e.stopImmediatePropagation();
+        enableFloor = enableFloor ? false : true;
+        enableFloorButton.classList.toggle('active');
+        floor.style.display = enableFloor ? 'initial' : 'none';
+        if (!enableFloor) {
+          enableReflectionsButton.classList.remove('active');
+          enableReflections = false;
+        } else {
+          enableReflectionsButton.classList.add('active');
+          enableReflections = true;
+        }
+      break;
+      case 'enableGlowButton':
+        e.stopImmediatePropagation();
+        enableGlow = enableGlow ? false : true;
+        enableGlowButton.classList.toggle('active');
+      break;
+      case 'persistStrokesButton':
+        e.stopImmediatePropagation();
+        persistStrokes = persistStrokes ? false : true;
+        persistStrokesButton.classList.toggle('active');
+        if (!persistStrokes) {
+          clearCanvasButton.classList.remove('ready');
+        } else {
+          clearCanvasButton.classList.add('ready');
+        }
+      break;
+      case 'autoBurstButton':
+        e.stopImmediatePropagation();
+        autoBursts = autoBursts ? false : true;
+        newBurstTimer = 0;
+        autoBurstButton.classList.toggle('active');
+      break;
+      case 'clearCanvasButton':
+        e.stopImmediatePropagation();
+        renderer.clear();
+      break;
     }
-  })
-
-  persistStrokesButton.addEventListener('click', (e) => {
-    e.stopImmediatePropagation();
-    persistStrokes = persistStrokes ? false : true;
-    persistStrokesButton.classList.toggle('active');
-    if (!persistStrokes) {
-      clearCanvasButton.classList.remove('ready');
-    } else {
-      clearCanvasButton.classList.add('ready');
-    }
-  })
-
-  autoBurstButton.addEventListener('click', (e) => {
-    e.stopImmediatePropagation();
-    autoBursts = autoBursts ? false : true;
-    newBurstTimer = 0;
-    autoBurstButton.classList.toggle('active');
-  })
-
-  clearCanvasButton.addEventListener('click', (e) => {
-    e.stopImmediatePropagation();
-    renderer.clear();
   })
   
   /*******************************************************************************/

@@ -86,3 +86,23 @@ button:hover {
   cursor: pointer;
   border: thin solid rgb(161, 83, 235);
 }
+
+button.count-low {
+  background-color: rgb(7, 211, 98);
+  color: black;
+}
+
+button.count-med {
+  background-color: aqua;
+  color: black;
+}
+
+button.count-high {
+  background-color: yellow;
+  color: black;
+}
+
+button.count-extreme {
+  background-color: rgb(209, 80, 80);
+  color: black;
+}
