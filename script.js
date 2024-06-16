@@ -35,11 +35,12 @@ window.addEventListener('load', ()=>{
       this.x = x;
       this.y = y;
       this.hue = Math.round(hue);
-      this.particles = [];
+      this.particles = {};    // as opposed to storing as an array, ths implementation will use objects with numeric indices (0 through particlesPerBurst)
       this.rendering = true;
 
       for (let i = 0; i < particlesPerBurst; i++) {
-        this.particles.push(new Particle(this.x, this.y));
+        this.particles[i] = new Particle(this.x, this.y);
+        this.particles.length = particlesPerBurst;
       }
     }
 
@@ -109,9 +110,6 @@ window.addEventListener('load', ()=>{
       this.zSpeed;
       this.airborne;        // once y speed reaches a negligible amount, set this boolean to false
       this.lifetime;        // the particle's lifetime drops at every move() call, and it is skipped for processing and rendering if lifetime <= 0
-      this.prevLifetime;    // the particle's lifetime on the previous move() call
-      this.lightness;       // handles the individual coloration of a particle (since its hue is managed by its parent particleGroup)
-      this.size;            // the weight of the particle, which ends up being its lineWidth in context.stroke operations
 
       this.resetValues();   // this immediately sets any values that are not initialized with values to something random
     }
@@ -119,9 +117,6 @@ window.addEventListener('load', ()=>{
     // resets and re-randomizes the particle's values. used at instantiation and when the parent particleGroup moves
     resetValues() {
       this.lifetime = 60 + Math.round(rng.value() * 30);  // particles will automatically be culled when their lifetime hits zero
-      this.prevLifetime = this.lifetime;
-      this.lightness = Math.round(60 + rng.value() * 40); // added lightness for more variety
-      this.size = Math.ceil(rng.value() * 2);                        // controls the stroke or rect size, depending on the particle render type currently chosen
       this.z = Math.max((4 * _h / 5) + Math.round(rng.value() * _h / 12), this.y);  // simulates depth (see move/render methods)
       this.xSpeed = (11 + (rng.value() * -22)) * window.devicePixelRatio;      // speed variables
       this.ySpeed = (16 + (rng.value() * -32)) * window.devicePixelRatio;      // for each axis
@@ -236,30 +231,33 @@ window.addEventListener('load', ()=>{
       // canvas for efficient offscreen rendering
       this.hiddenCanvas = document.createElement('CANVAS');
       this.hiddenCanvas.id = 'hiddenCanvas';
-      this.hiddenCtx = this.hiddenCanvas.getContext('2d', {willReadFrequently: true});
       this.hiddenCanvas.width = _w;
       this.hiddenCanvas.height = _h;
+
+      this.hiddenCtx = this.hiddenCanvas.getContext('2d', {willReadFrequently: true});
+      this.hiddenCtx.lineCap = 'round';
 
       // canvas for rendering reflections
       this.reflectCanvas = document.createElement('CANVAS');
       this.reflectCanvas.id = 'reflectCanvas';
-      this.reflectCanvas.style.filter = 'brightness(0.7) contrast(0.8)';
-      this.reflectCanvas.style.zIndex = '-1';
-      this.reflectCtx = this.reflectCanvas.getContext('2d');
+      this.reflectCanvas.style.zIndex = '-2';
       this.reflectCanvas.width = _w;
       this.reflectCanvas.height = _h;
 
+      this.reflectCtx = this.reflectCanvas.getContext('2d');
+      this.reflectCtx.lineCap = 'round';
+      
       document.body.appendChild(this.reflectCanvas);
 
       // canvas for rendering main canvas glow
       this.glowCanvas = document.createElement('CANVAS');
       this.glowCanvas.id = 'glowCanvas';
       this.glowCanvas.style.filter = 'blur(2px) brightness(1.1) contrast(1.2)';
-      this.glowCanvas.style.opacity = '0.7';
-      this.glowCanvas.style.zIndex = '0';
-      this.glowCtx = this.glowCanvas.getContext('2d');
+      this.glowCanvas.style.zIndex = '-1';
       this.glowCanvas.width = _w;
       this.glowCanvas.height = _h;
+
+      this.glowCtx = this.glowCanvas.getContext('2d');
 
       document.body.appendChild(this.glowCanvas);
     }
@@ -277,66 +275,128 @@ window.addEventListener('load', ()=>{
       this.renderQueue.push(groupToRender);
     }
 
+    // draw to offscreen canvas first; this image can be copied onto the visible canvases (regular and glow canvases)
     renderHidden() {
-      while (this.renderQueue.length > 0) {
+      for (let i = 0; i < this.renderQueue.length; i++) {
         // shift the particleGroup off the render queue. this method exits when the render queue is empty
-        let pGroup = this.renderQueue.pop();
+        let pGroup = this.renderQueue[i];
+        let subgroupSize = Math.ceil(pGroup.particles.length / 3);
+        let lastSubGroup = 1;
+
+        // set initial values for the context; these are the values when (currentSubgroup == 1)
+        this.hiddenCtx.beginPath();
+        this.hiddenCtx.lineWidth = 3 * window.devicePixelRatio;
+        this.hiddenCtx.strokeStyle = `hsl(${pGroup.hue}, 100%, 50%)`;
 
         // loop through the queued group's particles
         for (let j = 0; j < pGroup.particles.length; j++) {
+          // set context line width and stroke style only as needed, depending on the current subgroup
+          let currentSubgroup = Math.ceil(j / subgroupSize) + 1;
+          if (currentSubgroup != lastSubGroup) {
+            // if the subgroup has changed, close the last path before opening the next
+            this.hiddenCtx.stroke();
+            this.hiddenCtx.beginPath();
+
+            // 4 - currentSubgroup will equal either 2 or 1 (a size of 3 is already taken care of by the context draw styles outside the loop)
+            // "4 - " is used to make sure that smaller particles are tied to higher lightness
+            this.hiddenCtx.lineWidth = (4 - currentSubgroup) * window.devicePixelRatio;
+            // hue is a group value, and lightness is between 45 + 16.6667 and 95. coinciding with size, larger particles are more deeply colored (lightness closer to 50)
+            this.hiddenCtx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${40 + ((50 / 3) * currentSubgroup)}%)`;
+          }
+
           let particle = pGroup.particles[j];
           
           if (particle.lifetime <= 0) { continue; }
           
-          let particleSize = particle.size * window.devicePixelRatio;
+          // this if statement is quite expensive, but it guarantees that lower z-index particles are never drawn on top of higher ones
           if (particle.zSpeed < 0) {
-            this.hiddenCtx.globalCompositeOperation = this.reflectCtx.globalCompositeOperation = 'destination-over';
+            this.hiddenCtx.globalCompositeOperation = 'destination-over';
           } else {
-            this.hiddenCtx.globalCompositeOperation = this.reflectCtx.globalCompositeOperation = 'source-over';
-          }
-          
-          this.hiddenCtx.lineCap = this.reflectCtx.lineCap = 'round';
-          this.hiddenCtx.lineWidth = this.reflectCtx.lineWidth = particleSize;
-          this.hiddenCtx.strokeStyle = this.reflectCtx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${particle.lightness}%)`;
-          // draw reflections first
-          // check height; if within the reflectThreshold, and if enableFloor is true, draw reflections
-          let height = Math.abs(particle.z - particle.y);
-
-          if (enableFloor && enableReflections && height < reflectThreshold) {
-            // draw the reflection based on the reflected point's distance from the particle's z-position
-            // use lineTo for persisted strokes
-            this.reflectCtx.beginPath();
-            this.reflectCtx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + particle.size + window.devicePixelRatio);
-            this.reflectCtx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + particle.size + window.devicePixelRatio);
-            this.reflectCtx.stroke();
+            this.hiddenCtx.globalCompositeOperation = 'source-over';
           }
 
-          this.hiddenCtx.beginPath();
           this.hiddenCtx.moveTo(particle.prevX, particle.prevY);
           this.hiddenCtx.lineTo(particle.x, particle.y);
-          this.hiddenCtx.stroke();
+
+          // only stroke here if the particle drawing subgroup changed; otherwise, this is a polyline
+          if (currentSubgroup != lastSubGroup) {
+            this.hiddenCtx.beginPath();
+            lastSubGroup = currentSubgroup;
+          }
         }
+
+        // catches the last open path after the loop ends (because currentSubgroup is still equal to lastSubGroup at that point)
+        this.hiddenCtx.stroke();
       }
     }
-    
-    // helper function that uses main canvas imageData to create a source image which can then be CSS-filtered
-    renderGlow() {
-      let baseImgData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-      this.glowCtx.putImageData(baseImgData, 0, 0);
+
+    renderReflect() {
+      for (let i = 0; i < this.renderQueue.length; i++) {
+        // shift the particleGroup off the render queue. this method exits when the render queue is empty
+        let pGroup = this.renderQueue[i];
+        let subgroupSize = Math.ceil(pGroup.particles.length / 3);
+        let lastSubGroup = 1;
+
+        // set initial values for the context; these are the values when (currentSubgroup == 1)
+        this.reflectCtx.beginPath();
+        this.reflectCtx.lineWidth = 3 * window.devicePixelRatio;
+        this.reflectCtx.strokeStyle = `hsl(${pGroup.hue}, 70%, 60%)`;
+
+        // loop through the queued group's particles
+        for (let j = 0; j < pGroup.particles.length; j++) {
+          // set context line width and stroke style only as needed, depending on the current subgroup
+          let currentSubgroup = Math.ceil(j / subgroupSize) + 1;
+          if (currentSubgroup != lastSubGroup) {
+            this.reflectCtx.stroke();
+            this.reflectCtx.beginPath();
+
+            // 4 - currentSubgroup will equal either 2 or 1 (a size of 3 is already taken care of by the context draw styles outside the loop)
+            // "4 - " is used to make sure that smaller particles are tied to higher lightness
+            this.reflectCtx.lineWidth = (4 - currentSubgroup) * window.devicePixelRatio;
+            // hue is a group value, and lightness is between 45 + 16.6667 and 95. coinciding with size, larger particles are more deeply colored (lightness closer to 50)
+            this.reflectCtx.strokeStyle = `hsl(${pGroup.hue}, 70%, ${40 + ((30 / 3) * currentSubgroup)}%)`;
+          }
+
+          let particle = pGroup.particles[j];
+          
+          if (particle.lifetime <= 0) { continue; }
+          
+          if (particle.zSpeed < 0) {
+            this.reflectCtx.globalCompositeOperation = 'destination-over';
+          } else {
+            this.reflectCtx.globalCompositeOperation = 'source-over';
+          }
+
+          this.reflectCtx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + (3 * window.devicePixelRatio) + window.devicePixelRatio);
+          this.reflectCtx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + (3 * window.devicePixelRatio) + window.devicePixelRatio);
+
+          // only stroke here if the particle drawing subgroup changed; otherwise, this is a polyline
+          if (currentSubgroup != lastSubGroup) {
+            this.reflectCtx.beginPath();
+            lastSubGroup = currentSubgroup;
+          }
+        }
+
+        // catches the last open path after the loop ends (because currentSubgroup is still equal to lastSubGroup at that point)
+        this.reflectCtx.stroke();
+      }
     }
 
     // render the visible canvas from the hidden one
     renderVisible() {
       let baseImgData = this.hiddenCtx.getImageData(0, 0, this.hiddenCanvas.width, this.hiddenCanvas.height);
       this.ctx.putImageData(baseImgData, 0, 0);
+      if (enableGlow) { this.glowCtx.putImageData(baseImgData, 0, 0); }
     }
 
     // draws particle groups that are currently rendering
     render() {
       if (!persistStrokes) { this.clear(); }
       this.renderHidden();
+      if (enableFloor && enableReflections) { this.renderReflect(); }
       this.renderVisible();
-      if (enableGlow) { this.renderGlow(); }
+
+      this.renderQueue = [];    // empty the render queue every time
     }
   }
 
@@ -350,18 +410,17 @@ window.addEventListener('load', ()=>{
   let airResistance = 0.002 * window.devicePixelRatio;      // particles slow down by this factor the longer they are in the air
   let particlesPerBurst = 50;                               // particles per burst; user-configurable at low/med/high/extreme
   let newBurstTimer = 60;                                   // the timer that will allow new particle bursts to form automatically
-  let reflectThreshold = 200 * window.devicePixelRatio;     // the threshold for when reflections will appear on the ground
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
   let enableFloor = true;         // user toggleable variable that shows or hides the reflective floor texture and toggles gravity
   let enableGlow = true;          // user toggleable variable that shows or particle glow
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
   let autoBursts = true;          // user toggleable variable that enables automatic bursts
-  let _w = innerWidth * window.devicePixelRatio;
-  let _h = innerHeight * window.devicePixelRatio;
+  let _w = innerWidth * window.devicePixelRatio;    // set global vars for DPR-adjusted width/height
+  let _h = innerHeight * window.devicePixelRatio;   // set global vars for DPR-adjusted width/height
 
   let rng = new RNG();
   let renderer = new Renderer(document.getElementById('canvas'));
-  let particleGroups = [];
+  let particleGroups = [new ParticleGroup(_w / 2, _h / 3, 270)];    // initialize this array with a group of particles
   
   /*******************************************************************************/
   /*                                                                             */
@@ -512,9 +571,6 @@ window.addEventListener('load', ()=>{
   let refreshThrottle = 1;
   let tempRefreshThrottle = 0;
 
-  // push a new particle group onto the list to kick things off
-  particleGroups.push(new ParticleGroup(_w / 2, _h / 3, rng.value() * 360));
-
   function animate(callbackTime) {
     // target 30fps by dividing the time between rAF calls by 30 to calculate per-frame movement
     tempRefreshThrottle = callbackTime - firstFrameTime;
@@ -543,7 +599,9 @@ window.addEventListener('load', ()=>{
     }
 
     // render, passing the calculated refreshThrottle. This will help set appropriate line thicknesses for particle rendering
-    renderer.render(refreshThrottle);
+    if (renderer.renderQueue.length > 0) {
+      renderer.render(refreshThrottle);
+    }
     window.requestAnimationFrame(animate);
   }
 
