@@ -118,9 +118,9 @@ window.addEventListener('load', ()=>{
     resetValues() {
       this.lifetime = 60 + Math.round(rng.value() * 30);  // particles will automatically be culled when their lifetime hits zero
       this.z = Math.max((4 * _h / 5) + Math.round(rng.value() * _h / 12), this.y);  // simulates depth (see move/render methods)
-      this.xSpeed = (11 + (rng.value() * -22)) * window.devicePixelRatio;      // speed variables
-      this.ySpeed = (16 + (rng.value() * -32)) * window.devicePixelRatio;      // for each axis
-      this.zSpeed = (0.5 + (rng.value() * -1)) * window.devicePixelRatio;      // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
+      this.xSpeed = (11 + (rng.value() * -22)) * dpr;      // speed variables
+      this.ySpeed = (16 + (rng.value() * -32)) * dpr;      // for each axis
+      this.zSpeed = (0.5 + (rng.value() * -1)) * dpr;      // note that zSpeed is set much lower, as depth changes more subtly/slowly than x/y position
       this.airborne = true;
       this.prevX = this.x;
       this.prevY = this.y;
@@ -148,64 +148,57 @@ window.addEventListener('load', ()=>{
         this.y += this.ySpeed * refreshThrottle;
         this.z += this.zSpeed * refreshThrottle;
       } else {
-        /*
-        3 conditions:
-        on the ground -> your current ySpeed is negligible and your distance to z is negligible
-        bouncing -> your next proposed y position is greater than your z position, and your current or proposed y speeds are large.
-        free fall -> your next proposed y position is less than your z position
-        */
-        let proposedY = this.y + this.ySpeed * refreshThrottle;
-        let proposedYSpeed = this.ySpeed - (this.ySpeed * airResistance * refreshThrottle) + (gravity * refreshThrottle);
-        let proposedZ = this.z + this.zSpeed * refreshThrottle;
-        let proposedZSpeed = this.zSpeed - (this.zSpeed * airResistance * refreshThrottle);
+        
+        // 3 conditions:
+        // on the ground -> your current ySpeed is negligible and your distance to z is negligible
+        // bouncing -> your next proposed y position is greater than your z position, and your current or proposed y speeds are large.
+        // free fall -> your next proposed y position is less than your z position
+
+        let proposedY = this.y + (this.ySpeed * refreshThrottle);
+        let proposedZ = this.z + (this.zSpeed * refreshThrottle);
+        
+        let prevYSpeed = this.ySpeed;
+        
+        this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
+        this.zSpeed = this.zSpeed - (this.zSpeed * airResistance * refreshThrottle);
+        this.ySpeed = this.ySpeed - (this.ySpeed * airResistance * refreshThrottle) + (gravity * refreshThrottle);;
+        this.z += this.zSpeed * refreshThrottle;
+
+        let movementProportion = (Math.abs((this.y - this.z) / this.ySpeed) / refreshThrottle);
         
         if (!this.airborne) {
           if (this.y < _h * (72/100)) { this.lifetime = -1; }   // if the particle is above the reflective floor draw area, kill it
 
-          // on the ground
-          // set speeds
-          this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
-          this.zSpeed = proposedZSpeed;
-          
           // set coords
           this.x += this.xSpeed * refreshThrottle;
           this.y += this.zSpeed * refreshThrottle;
-          this.z += this.zSpeed * refreshThrottle;
+
         } else if (proposedY < proposedZ) {
           // free fall
-          // set speeds
-          this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
-          this.ySpeed = proposedYSpeed;
-          this.zSpeed = proposedZSpeed;
-          
+          // set ySpeed
+
           // set coords
-          this.x += this.xSpeed * refreshThrottle;
+          this.x += this.xSpeed * refreshThrottle;          
           this.y += (this.ySpeed * refreshThrottle) + (this.zSpeed * refreshThrottle);
-          this.z += this.zSpeed * refreshThrottle;
         } else {
           // bounce
           if (this.y < _h * (72/100)) { this.lifetime = -1; }   // if the particle is above the reflective floor draw area, kill it
           // since a bounce interrupts what would be a full y axis displacement,
           // we need to move only a proportion of the final position
           // this value can be calculated as the amount of movement allowed divided by the full proposed movement
-          let movementProportion = Math.abs((this.y - this.z) / proposedYSpeed) / refreshThrottle;
           
           // hold on to the previous ySpeed, so calculations can be done for airbornedness
-          let prevYSpeed = this.ySpeed;
           
-          // set speeds
-          this.xSpeed = this.xSpeed - (this.xSpeed * airResistance * refreshThrottle);
-          this.ySpeed = (-0.6) * proposedYSpeed;
-          this.zSpeed = proposedZSpeed;
+          // set ySpeed
+          this.ySpeed *= -0.6;
           
           // set coords
           // we also need to snap the particle's y position to its z position and to the proportion-affected x-position
           this.x += this.xSpeed * movementProportion * refreshThrottle;
-          this.z += this.zSpeed * refreshThrottle;
           this.y = this.z + this.zSpeed * refreshThrottle;
           
           // if the resulting bounce speed is less than gravity, set the particle to no longer airborne
-          if (Math.abs(Math.abs(this.ySpeed) - Math.abs(prevYSpeed)) < gravity) {
+          if (Math.abs(Math.abs(this.ySpeed) - Math.abs(prevYSpeed)) < gravity / 3) {
             this.airborne = false;
           }
         }
@@ -285,7 +278,7 @@ window.addEventListener('load', ()=>{
 
         // set initial values for the context; these are the values when (currentSubgroup == 1)
         this.hiddenCtx.beginPath();
-        this.hiddenCtx.lineWidth = 3 * window.devicePixelRatio;
+        this.hiddenCtx.lineWidth = 3 * dpr;
         this.hiddenCtx.strokeStyle = `hsl(${pGroup.hue}, 100%, 50%)`;
 
         // loop through the queued group's particles
@@ -299,7 +292,7 @@ window.addEventListener('load', ()=>{
 
             // 4 - currentSubgroup will equal either 2 or 1 (a size of 3 is already taken care of by the context draw styles outside the loop)
             // "4 - " is used to make sure that smaller particles are tied to higher lightness
-            this.hiddenCtx.lineWidth = (4 - currentSubgroup) * window.devicePixelRatio;
+            this.hiddenCtx.lineWidth = (4 - currentSubgroup) * dpr;
             // hue is a group value, and lightness is between 45 + 16.6667 and 95. coinciding with size, larger particles are more deeply colored (lightness closer to 50)
             this.hiddenCtx.strokeStyle = `hsl(${pGroup.hue}, 100%, ${40 + ((50 / 3) * currentSubgroup)}%)`;
           }
@@ -339,7 +332,7 @@ window.addEventListener('load', ()=>{
 
         // set initial values for the context; these are the values when (currentSubgroup == 1)
         this.reflectCtx.beginPath();
-        this.reflectCtx.lineWidth = 3 * window.devicePixelRatio;
+        this.reflectCtx.lineWidth = 3 * dpr;
         this.reflectCtx.strokeStyle = `hsl(${pGroup.hue}, 70%, 60%)`;
 
         // loop through the queued group's particles
@@ -352,7 +345,7 @@ window.addEventListener('load', ()=>{
 
             // 4 - currentSubgroup will equal either 2 or 1 (a size of 3 is already taken care of by the context draw styles outside the loop)
             // "4 - " is used to make sure that smaller particles are tied to higher lightness
-            this.reflectCtx.lineWidth = (4 - currentSubgroup) * window.devicePixelRatio;
+            this.reflectCtx.lineWidth = (4 - currentSubgroup) * dpr;
             // hue is a group value, and lightness is between 45 + 16.6667 and 95. coinciding with size, larger particles are more deeply colored (lightness closer to 50)
             this.reflectCtx.strokeStyle = `hsl(${pGroup.hue}, 70%, ${40 + ((30 / 3) * currentSubgroup)}%)`;
           }
@@ -367,8 +360,8 @@ window.addEventListener('load', ()=>{
             this.reflectCtx.globalCompositeOperation = 'source-over';
           }
 
-          this.reflectCtx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + (3 * window.devicePixelRatio) + window.devicePixelRatio);
-          this.reflectCtx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + (3 * window.devicePixelRatio) + window.devicePixelRatio);
+          this.reflectCtx.moveTo(particle.prevX, particle.prevY + ((particle.prevZ - (particle.prevY )) * 2) + (3 * dpr));
+          this.reflectCtx.lineTo(particle.x, particle.y + ((particle.z - (particle.y )) * 2) + (3 * dpr));
 
           // only stroke here if the particle drawing subgroup changed; otherwise, this is a polyline
           if (currentSubgroup != lastSubGroup) {
@@ -406,8 +399,9 @@ window.addEventListener('load', ()=>{
   /*                                                                             */
   /*******************************************************************************/
   
-  let gravity = 1.7 * window.devicePixelRatio;              // pretty self-explanatory, but this feels like a good value
-  let airResistance = 0.002 * window.devicePixelRatio;      // particles slow down by this factor the longer they are in the air
+  let dpr = window.devicePixelRatio;
+  let gravity = 1.7 * dpr;              // pretty self-explanatory, but this feels like a good value
+  let airResistance = 0.002 * dpr;      // particles slow down by this factor the longer they are in the air
   let particlesPerBurst = 50;                               // particles per burst; user-configurable at low/med/high/extreme
   let newBurstTimer = 60;                                   // the timer that will allow new particle bursts to form automatically
   let persistStrokes = false;     // user toggleable variable that controls whether to clearRect() the canvas every frame, resulting in either discrete particles or streaming lines
@@ -415,8 +409,8 @@ window.addEventListener('load', ()=>{
   let enableGlow = true;          // user toggleable variable that shows or particle glow
   let enableReflections = true;   // user toggleable variable that enables rendering reflections
   let autoBursts = true;          // user toggleable variable that enables automatic bursts
-  let _w = innerWidth * window.devicePixelRatio;    // set global vars for DPR-adjusted width/height
-  let _h = innerHeight * window.devicePixelRatio;   // set global vars for DPR-adjusted width/height
+  let _w = innerWidth * dpr;    // set global vars for DPR-adjusted width/height
+  let _h = innerHeight * dpr;   // set global vars for DPR-adjusted width/height
 
   let rng = new RNG();
   let renderer = new Renderer(document.getElementById('canvas'));
@@ -549,7 +543,7 @@ window.addEventListener('load', ()=>{
       return;
     }
     if (event.changedTouches) { event.preventDefault(); }   // as promised: preventDefault on touch events
-    particleBurst(e.clientX * window.devicePixelRatio, e.clientY * window.devicePixelRatio);
+    particleBurst(e.clientX * dpr, e.clientY * dpr);
     newBurstTimer = 60;   // wait two seconds after the last user-initiated burst
   }
 
@@ -575,7 +569,7 @@ window.addEventListener('load', ()=>{
     // target 30fps by dividing the time between rAF calls by 30 to calculate per-frame movement
     tempRefreshThrottle = callbackTime - firstFrameTime;
     firstFrameTime = callbackTime || 0;
-    refreshThrottle = tempRefreshThrottle / 30;
+    refreshThrottle = Math.min(tempRefreshThrottle / 30, 1);
 
     // if the user has autoburst enabled
     if (autoBursts) {
